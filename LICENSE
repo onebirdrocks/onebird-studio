@@ -1,0 +1,42 @@
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+Copyright [2024] [OnebirdStudio Contributors]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+-------------------------------------------------------------------------------
+
+🪶 TRADEMARK & BRAND USAGE NOTICE (OnebirdStudio)
+
+"OnebirdStudio" and the OnebirdStudio logo (if present) are trademarks or
+distinctive identifiers of the Onebird project.
+
+This project is open source under the Apache 2.0 License, but the use of the
+name "OnebirdStudio", any associated logos, domain names, or branding in
+derived works, forks, or commercial products is **not permitted** without
+explicit, written permission from the project maintainers.
+
+In other words:
+- ✅ You can use the code freely, including for commercial purposes
+- ❌ You cannot use the name "OnebirdStudio" or the logo in a way that implies
+     official affiliation or endorsement
+- ⚠️ If you build something based on this, please rename your project and
+     create your own branding
+
+For questions about licensing or brand usage, please contact:
+[youremail@domain.com]
+
