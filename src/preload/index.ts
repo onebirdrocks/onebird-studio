@@ -1,8 +1,28 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {}
+
+
+contextBridge.exposeInMainWorld('electron', {
+  ipcRenderer: {
+    send: (channel: string, data?: any) => {
+      ipcRenderer.send(channel, data)
+    }
+  }
+})
+
+const allowedChannels = ['go-main', 'ping']
+contextBridge.exposeInMainWorld('electron', {
+  ipcRenderer: {
+    send: (channel: string, data?: any) => {
+      if (allowedChannels.includes(channel)) {
+        ipcRenderer.send(channel, data)
+      }
+    }
+  }
+})
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise

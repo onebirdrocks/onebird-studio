@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Welcome to OneBird Studio</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(to bottom, #0e1e2f, #1c2b40);
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    .logo {
+      width: 180px;
+      height: 180px;
+      background-image: url('./icons/onebird_logo_transparent.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    p {
+      font-size: 16px;
+      margin-bottom: 30px;
+      opacity: 0.8;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 20px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      background-color: #fcb13e;
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .btn:hover {
+      background-color: #ffcb6b;
+    }
+  </style>
+
+  <script>
+    function goToMain() {
+      window.electron?.ipcRenderer?.send('go-main')
+    }
+  </script>
+
+</head>
+<body>
+  <div class="logo"></div>
+  <h1>Welcome to OneBird Studio</h1>
+  <p>Your lightweight AI-powered studio for solo creators and digital nomads</p>
+  <div class="buttons">
+    <button class="btn" onclick="goToMain()">Enter Studio</button>
+  </div>
+</body>
+</html>
