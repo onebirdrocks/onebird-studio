@@ -1,10 +1,13 @@
 {
-  "name": "onebird-studio2",
+  "name": "onebird-studio",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "A minimalist, local-first desktop APP built for creators, indie hackers, and digital nomads who work across time zones and across models.",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": {
+    "name": "Ruan, Yiming(onebird)",
+    "email": "rymrocks@163.com"
+  },
+  "homepage": "https://github.com/onebirdrocks/onebird-studio#readme",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -45,5 +48,13 @@
     "react-dom": "^18.3.1",
     "typescript": "^5.8.2",
     "vite": "^6.2.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/onebirdrocks/onebird-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/onebirdrocks/onebird-studio/issues"
   }
+
 }
