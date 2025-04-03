@@ -28,13 +28,18 @@ function createWindow(): void {
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      //preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../../out/preload/index.js'),
       sandbox: false
     }
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+   
+    if (is.dev) {
+      mainWindow.webContents.openDevTools()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -52,6 +57,11 @@ function createWindow(): void {
       mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
     }
   }
+
+  console.log('🟡 Tailwind Check:')
+  console.log('  - 确保 index.css 中包含 @tailwind base/components/utilities')
+  console.log('  - tailwind.config.js 的 content 配置应包含 renderer/src/**/*.{js,ts,jsx,tsx}')
+
 }
 
 app.whenReady().then(() => {

@@ -4,25 +4,19 @@ import { electronAPI } from '@electron-toolkit/preload'
 // Custom APIs for renderer
 const api = {}
 
+// ✅ 安全地注入 electron/ipcRenderer
+if (!('electron' in window)) {
+  contextBridge.exposeInMainWorld('electron', electronAPI)
+}
 
-contextBridge.exposeInMainWorld('electron', {
-  ipcRenderer: {
-    send: (channel: string, data?: any) => {
-      ipcRenderer.send(channel, data)
+// ✅ 示例：注入自定义 API（可选）
+if (!('api' in window)) {
+  contextBridge.exposeInMainWorld('api', {
+    ping: () => {
+      ipcRenderer.send('ping')
     }
-  }
-})
-
-const allowedChannels = ['go-main', 'ping']
-contextBridge.exposeInMainWorld('electron', {
-  ipcRenderer: {
-    send: (channel: string, data?: any) => {
-      if (allowedChannels.includes(channel)) {
-        ipcRenderer.send(channel, data)
-      }
-    }
-  }
-})
+  })
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
@@ -40,3 +34,5 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.api = api
 }
+
+export {}
