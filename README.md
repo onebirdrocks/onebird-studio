@@ -1,5 +1,5 @@
-# 🐦 onebird-studio
-<img height="64px" width="64px" src="./resources/onebird-ai.png" />
+# <img height="32px" width="32px" src="./resources/onebird-ai.png" /> onebird-studio
+
 
 > A minimalist and cross-platform desktop app built with Electron, TypeScript, and Webpack — created by [@onebirdrocks](https://github.com/onebirdrocks)
 
