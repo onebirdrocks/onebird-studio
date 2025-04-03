@@ -1,4 +1,4 @@
-import './assets/main.css'
+//import './assets/main.css'
 import './index.css'
 
 import React from 'react'

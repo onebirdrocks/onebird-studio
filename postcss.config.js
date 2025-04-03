@@ -10,5 +10,8 @@ module.exports = {
   theme: {
     extend: {}
   },
-  plugins: []
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
 }

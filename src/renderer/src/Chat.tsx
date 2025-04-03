@@ -5,65 +5,79 @@ export default function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   return (
-    <div className="flex h-screen bg-gray-900 text-white font-sans">
-      {/* Left Column - Menu */}
-      <div className="w-16 bg-gray-800 flex flex-col items-center py-4 space-y-6 border-r border-gray-700">
-        <button className="p-2 rounded hover:bg-gray-700">
-          <Settings size={20} />
-        </button>
-        <button className="p-2 rounded hover:bg-gray-700">
-          <MessageSquare size={20} />
-        </button>
-      </div>
-
-      {/* Middle Column - Sidebar */}
-      <div className={`transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-0'} bg-gray-850 overflow-hidden border-r border-gray-700`}> 
-        <div className="flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold">Topics</h2>
-          <button onClick={() => setSidebarOpen(false)} className="p-1 hover:bg-gray-700 rounded">
-            <PanelLeft size={20} />
+    <div className="flex h-screen bg-gray-900 text-white font-sans antialiased">
+      {/* 左侧工具栏 */}
+      <div className="flex-shrink-0 w-16 bg-gray-800 border-r border-gray-700">
+        <div className="flex flex-col items-center py-4 space-y-4">
+          <button className="p-2 rounded-lg hover:bg-gray-700 transition-colors">
+            <Settings className="w-6 h-6" />
+          </button>
+          <button className="p-2 rounded-lg hover:bg-gray-700 transition-colors">
+            <MessageSquare className="w-6 h-6" />
           </button>
         </div>
-        <div className="p-4 text-sm text-gray-400">Default Topic</div>
       </div>
 
-      {/* Right Column - Chat Panel */}
-      <div className="flex-1 flex flex-col">
-        {/* Chat Header */}
-        <div className="h-12 px-4 flex items-center border-b border-gray-700 bg-gray-850 text-sm">
-          <span>deepseek-ai/DeepSeek-V3 | OneBirdStudio</span>
-        </div>
-
-        {/* Chat Content */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-4">
-          <div className="text-sm text-gray-300">
-            <div className="bg-gray-800 p-3 rounded-md">
-              <pre className="text-red-400 whitespace-pre-wrap">
-{`{
-  "message": "401 \"Invalid token\"",
-  "status": 401,
-  "error": "Invalid token"
-}`}
-              </pre>
-              <div className="text-xs text-red-500 mt-2">
-                Authentication failed. Please check if your API key is correct
+      {/* 中间会话列表 */}
+      <div className={`flex-shrink-0 ${sidebarOpen ? 'w-64' : 'w-0'} bg-gray-800 border-r border-gray-700 transition-all duration-300 overflow-hidden`}>
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <h2 className="text-lg font-semibold">Topics</h2>
+            <button 
+              onClick={() => setSidebarOpen(false)}
+              className="p-2 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <PanelLeft className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4">
+              <div className="p-3 rounded-lg bg-gray-700 hover:bg-gray-600 cursor-pointer transition-colors">
+                <div className="font-medium">Default Topic</div>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Chat Input */}
-        <div className="p-4 border-t border-gray-700 bg-gray-850">
-          <div className="flex items-center gap-2">
+      {/* 右侧聊天区域 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-shrink-0 h-14 border-b border-gray-700 flex items-center px-4">
+          <span className="text-sm text-gray-300">deepseek-ai/DeepSeek-V3 | OneBirdStudio</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="bg-gray-800 rounded-lg p-4">
+            <pre className="text-red-400 whitespace-pre-wrap text-sm">
+{`{
+  "message": "401 "Invalid token"",
+  "status": 401,
+  "error": "Invalid token"
+}`}
+            </pre>
+            <p className="mt-2 text-sm text-red-400">
+              Authentication failed. Please check if your API key is correct
+            </p>
+          </div>
+        </div>
+
+        <div className="flex-shrink-0 border-t border-gray-700 p-4">
+          <div className="flex items-center gap-3">
             <input
               type="text"
-              className="flex-1 bg-gray-800 text-white px-4 py-2 rounded-lg text-sm focus:outline-none"
               placeholder="Type your message here..."
+              className="flex-1 bg-gray-800 text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <div className="flex items-center gap-2 text-gray-400">
-              <button className="hover:text-yellow-400">🔍</button>
-              <button className="hover:text-yellow-400">📎</button>
-              <button className="hover:text-yellow-400">⚙️</button>
+            <div className="flex items-center gap-2">
+              <button className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
+                🔍
+              </button>
+              <button className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
+                📎
+              </button>
+              <button className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
+                ⚙️
+              </button>
             </div>
           </div>
         </div>
