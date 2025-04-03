@@ -38,7 +38,7 @@ function createWindow(): void {
     mainWindow.show()
    
     if (is.dev) {
-      mainWindow.webContents.openDevTools()
+      //mainWindow.webContents.openDevTools()
     }
   })
 
@@ -58,9 +58,9 @@ function createWindow(): void {
     }
   }
 
-  console.log('🟡 Tailwind Check:')
-  console.log('  - 确保 index.css 中包含 @tailwind base/components/utilities')
-  console.log('  - tailwind.config.js 的 content 配置应包含 renderer/src/**/*.{js,ts,jsx,tsx}')
+  //console.log('🟡 Tailwind Check:')
+  //console.log('  - 确保 index.css 中包含 @tailwind base/components/utilities')
+  //console.log('  - tailwind.config.js 的 content 配置应包含 renderer/src/**/*.{js,ts,jsx,tsx}')
 
 }
 
