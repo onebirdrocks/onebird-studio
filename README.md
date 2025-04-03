@@ -20,15 +20,9 @@
 # Clone the repo
 git clone https://github.com/onebirdrocks/onebird-studio.git
 cd onebird-studio
+npm install
 
 # Starting your app
-npm start
-
-# Building distributables
-npm run make
+npm run dev
 
 
-# Publishing your app
-npm install --save-dev @electron-forge/publisher-github
-
-npm run publish
