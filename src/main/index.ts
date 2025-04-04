@@ -32,9 +32,28 @@ function createWindow(): void {
       //preload: join(__dirname, '../preload/index.js'),
       preload: join(__dirname, '../../out/preload/index.js'),
       sandbox: false,
-      zoomFactor: 1.0
+      zoomFactor: 1.0,
+      webSecurity: false, // 允许跨域请求
+      nodeIntegration: true,
+      contextIsolation: true
     }
   })
+
+
+  // 设置 CSP 策略
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self';" +
+          "connect-src 'self' http://localhost:11434;" +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval';" +
+          "style-src 'self' 'unsafe-inline';"
+        ]
+      }
+    });
+  });
 
   // 设置初始缩放级别
   mainWindow.webContents.setZoomLevel(DEFAULT_ZOOM_LEVEL)

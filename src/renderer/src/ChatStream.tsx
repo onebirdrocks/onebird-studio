@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { PanelLeft, PanelRight, Settings, MessageSquare, Sun, Moon } from 'lucide-react'
-import { useChatLLM } from './hooks/useChatLLM'
+import { useChatLLMStream } from './hooks/useChatLLMStream'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -14,32 +14,34 @@ import { AnimatePresence, motion as m } from 'framer-motion'
 
 import 'katex/dist/katex.min.css'
 
-// 首先定义 Tooltip 的位置类型
 type TooltipPosition = 'top' | 'bottom';
 
-// 修改 Tooltip 组件
-const Tooltip = ({ text, position = 'top' }: { text: string; position?: TooltipPosition }) => (
-  <m.div
-    className={`absolute ${
-      position === 'top'
-        ? 'bottom-full mb-2' 
-        : 'top-full mt-2'
-    } left-1/2 -translate-x-1/2 w-max text-sm bg-yellow-400 text-gray-900 px-2 py-1 rounded shadow-lg z-10`}
-    initial={{ opacity: 0, y: position === 'top' ? 5 : -5 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: position === 'top' ? 5 : -5 }}
-    transition={{ duration: 0.2 }}
-  >
-    {text}
-  </m.div>
-);
+interface TooltipProps {
+  text: string;
+  position?: TooltipPosition;
+}
 
-export default function Chat() {
+function Tooltip({ text, position = 'top' }: TooltipProps) {
+  return (
+    <m.div
+      initial={{ opacity: 0, y: position === 'top' ? 10 : -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: position === 'top' ? 10 : -10 }}
+      className={`absolute ${
+        position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+      } left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap`}
+    >
+      {text}
+    </m.div>
+  );
+}
+
+export default function ChatStream() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [input, setInput] = useState('')
   const [hovered, setHovered] = useState<string | null>(null)
   const [isDarkMode, setIsDarkMode] = useState(true)
-  const { messages, isLoading, sendMessage, serviceStatus } = useChatLLM()
+  const { messages, isLoading, sendMessage, serviceStatus } = useChatLLMStream()
   const [tooltipPositions, setTooltipPositions] = useState<Record<string, TooltipPosition>>({});
 
   const handleCopy = (text: string) => {
