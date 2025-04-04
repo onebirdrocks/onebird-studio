@@ -5,6 +5,7 @@ module.exports = {
     './src/renderer/index.html',
     './src/renderer/src/**/*.{js,ts,jsx,tsx}'
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       fontSize: {
@@ -21,8 +22,33 @@ module.exports = {
         '7xl': '4.5rem',     // 72px
         '8xl': '6rem',       // 96px
         '9xl': '8rem'        // 128px
+      },
+      typography: {
+        DEFAULT: {
+          css: {
+            maxWidth: 'none',
+            code: {
+              color: '#ef476f',
+              backgroundColor: '#f8f9fa',
+              padding: '0.2em 0.4em',
+              borderRadius: '0.25rem',
+              fontWeight: '400'
+            }
+          }
+        },
+        dark: {
+          css: {
+            color: '#fff',
+            code: {
+              color: '#ef476f',
+              backgroundColor: '#374151'
+            }
+          }
+        }
       }
     }
   },
-  plugins: []
+  plugins: [
+    require('@tailwindcss/typography')
+  ]
 }

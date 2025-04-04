@@ -47,7 +47,7 @@ function createWindow(): void {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           "default-src 'self';" +
-          "connect-src 'self' http://localhost:11434;" +
+          "connect-src 'self' http://localhost:11434 https://api.openai.com;" +
           "script-src 'self' 'unsafe-inline' 'unsafe-eval';" +
           "style-src 'self' 'unsafe-inline';"
         ]

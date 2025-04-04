@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ChatMessage, sendMessageToOllama, checkOllamaStatus } from '../services/ollamaApi';
+import { Message, sendMessageToOllamaStream, checkOllamaStatus } from '../services/ollamaApi';
 
 interface ChatState {
-  messages: ChatMessage[];
+  messages: Message[];
   isLoading: boolean;
   error: string | null;
   isServiceAvailable: boolean;
@@ -15,7 +15,7 @@ export function useChatLLM() {
   const [state, setState] = useState<ChatState>({
     messages: [
       {
-        role: 'system',
+        role: 'system' as const,
         content: SYSTEM_PROMPT
       }
     ],
@@ -30,8 +30,8 @@ export function useChatLLM() {
       const status = await checkOllamaStatus();
       setState(prev => ({
         ...prev,
-        isServiceAvailable: status.serviceAvailable,
-        isModelAvailable: status.modelAvailable,
+        isServiceAvailable: status.isServiceAvailable,
+        isModelAvailable: status.isModelAvailable,
         error: null
       }));
     } catch (error) {
@@ -67,18 +67,42 @@ export function useChatLLM() {
       return;
     }
 
+    const newMessages = [...state.messages, { role: 'user' as const, content: userMessage }];
     setState(prev => ({
       ...prev,
-      messages: [...prev.messages, { role: 'user', content: userMessage }],
+      messages: newMessages,
       isLoading: true,
       error: null
     }));
 
     try {
-      const response = await sendMessageToOllama([...state.messages, { role: 'user', content: userMessage }]);
       setState(prev => ({
         ...prev,
-        messages: [...prev.messages, { role: 'assistant', content: response }],
+        messages: [...prev.messages, { role: 'assistant' as const, content: '' }]
+      }));
+
+      let accumulatedResponse = '';
+      await sendMessageToOllamaStream(
+        newMessages,
+        'deepseek-r1:latest',
+        (token) => {
+          accumulatedResponse += token;
+          setState(prev => {
+            const messages = [...prev.messages];
+            messages[messages.length - 1] = {
+              role: 'assistant' as const,
+              content: accumulatedResponse
+            };
+            return {
+              ...prev,
+              messages
+            };
+          });
+        }
+      );
+      
+      setState(prev => ({
+        ...prev,
         isLoading: false
       }));
     } catch (error) {
@@ -95,7 +119,7 @@ export function useChatLLM() {
       ...prev,
       messages: [
         {
-          role: 'system',
+          role: 'system' as const,
           content: SYSTEM_PROMPT
         }
       ],
@@ -108,7 +132,7 @@ export function useChatLLM() {
       ...prev,
       messages: [
         {
-          role: 'system',
+          role: 'system' as const,
           content: newPrompt
         },
         ...prev.messages.filter(msg => msg.role !== 'system')

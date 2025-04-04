@@ -1,7 +1,8 @@
 import { useState, useEffect, ReactNode, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PanelLeft, Settings, MessageSquare, Sun, Moon, Send } from 'lucide-react'
+import { PanelLeft, Settings, MessageSquare, Sun, Moon, Send, ChevronDown } from 'lucide-react'
 import { useChatLLMStream } from './hooks/useChatLLMStream'
+import { useModelSelection } from './hooks/useModelSelection'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -9,6 +10,7 @@ import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import type { Pluggable } from 'unified'
 
 import 'katex/dist/katex.min.css'
 
@@ -40,6 +42,9 @@ function Tooltip({ text, position = 'top' }: TooltipProps) {
   );
 }
 
+const remarkPlugins = [remarkGfm, remarkMath] as any[]
+const rehypePlugins = [rehypeKatex, rehypeRaw] as any[]
+
 export default function ChatStream() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [input, setInput] = useState('')
@@ -47,9 +52,21 @@ export default function ChatStream() {
   const [isDarkMode, setIsDarkMode] = useState(true)
   const [streamingMessage, setStreamingMessage] = useState('')
   const [isThinking, setIsThinking] = useState(false)
+  const [showModelSelect, setShowModelSelect] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const { messages, isLoading, sendMessage, isServiceAvailable, isModelAvailable } = useChatLLMStream()
+  const { 
+    selectedModel, 
+    setSelectedModel, 
+    availableModels, 
+    openAIKey, 
+    updateOpenAIKey,
+    isLoadingModels,
+    error: modelError 
+  } = useModelSelection()
   const [tooltipPositions, setTooltipPositions] = useState<Record<string, TooltipPosition>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const modelSelectRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -57,30 +74,31 @@ export default function ChatStream() {
     }
   };
 
-  // 当消息列表更新时滚动
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, streamingMessage]);
 
-  // 当流式消息更新时滚动
   useEffect(() => {
-    scrollToBottom();
-  }, [streamingMessage]);
+    const root = document.documentElement;
+    root.classList.toggle('dark', isDarkMode);
+  }, [isDarkMode]);
 
-  const menuItems: MenuItemProps[] = [
-    { label: 'Settings', icon: <Settings size={20} />, onClick: () => {} },
-    { label: 'Messages', icon: <MessageSquare size={20} />, onClick: () => {} },
-    { label: 'Toggle Theme', icon: isDarkMode ? <Sun size={20} /> : <Moon size={20} />, onClick: () => setIsDarkMode(!isDarkMode) }
-  ];
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modelSelectRef.current && !modelSelectRef.current.contains(event.target as Node)) {
+        setShowModelSelect(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text)
-  }
-
-  useEffect(() => {
-    const root = document.documentElement
-    root.classList.toggle('dark', isDarkMode)
-  }, [isDarkMode])
+    navigator.clipboard.writeText(text);
+  };
 
   const handleMouseEnter = (label: string, event: React.MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -106,22 +124,21 @@ export default function ChatStream() {
     await sendMessage(userInput, (token) => {
       if (token.includes('<think>')) {
         inThinkingMode = true;
-        token = token.replace('<think>', '思考：');
+        thinkingContent = '';
+        token = token.replace('<think>', '');
         setIsThinking(true);
       } else if (token.includes('</think>')) {
         inThinkingMode = false;
         token = token.replace('</think>', '');
+        setIsThinking(false);
       }
       
       if (inThinkingMode) {
         thinkingContent += token;
+        currentContent = `<think>${thinkingContent}</think>${normalContent}`;
       } else {
         normalContent += token;
-      }
-      
-      currentContent = normalContent;
-      if (thinkingContent) {
-        currentContent = `<think>${thinkingContent}</think>${normalContent}`;
+        currentContent = thinkingContent ? `<think>${thinkingContent}</think>${normalContent}` : normalContent;
       }
       
       setStreamingMessage(currentContent);
@@ -136,55 +153,19 @@ export default function ChatStream() {
   };
 
   const renderMarkdown = (content: string) => {
-    // 处理已完成的消息中的 <think> 标签
-    if (!isLoading) {
-      const parts = content.split(/(<think>[\s\S]*?<\/think>)/g).map((part, index) => {
-        if (part.startsWith('<think>')) {
-          const cleanContent = part
-            .replace('<think>', '思考：')
-            .replace('</think>', '');
-          
-          return (
-            <div key={index} className="bg-purple-100 dark:bg-purple-900/30 p-4 rounded-lg my-2 text-purple-800 dark:text-purple-200">
-              <ReactMarkdown
-                className="prose max-w-none dark:prose-invert mt-1"
-                components={{
-                  code({ className, children, ...props }) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    return match ? (
-                      <div className="relative group">
-                        <SyntaxHighlighter
-                          style={oneDark}
-                          language={match[1]}
-                          PreTag="div"
-                          {...props}
-                        >
-                          {String(children).replace(/\n$/, '')}
-                        </SyntaxHighlighter>
-                        <button
-                          onClick={() => handleCopy(String(children))}
-                          className="absolute top-2 right-2 p-2 rounded bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          复制
-                        </button>
-                      </div>
-                    ) : (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    );
-                  },
-                }}
-              >
-                {cleanContent}
-              </ReactMarkdown>
-            </div>
-          );
-        } else if (part.trim()) {
-          return (
+    const parts = content.split(/(<think>[\s\S]*?<\/think>)/g).map((part, index) => {
+      if (part.startsWith('<think>')) {
+        const cleanContent = part
+          .replace(/<think>|<\/think>/g, '')
+          .trim();
+        
+        return cleanContent ? (
+          <div key={index} className="bg-purple-100 dark:bg-purple-900/30 p-4 rounded-lg my-2 text-purple-800 dark:text-purple-200">
+            <div className="font-bold mb-2">思考：</div>
             <ReactMarkdown
-              key={index}
               className="prose max-w-none dark:prose-invert mt-1"
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={rehypePlugins}
               components={{
                 code({ className, children, ...props }) {
                   const match = /language-(\w+)/.exec(className || '');
@@ -213,140 +194,95 @@ export default function ChatStream() {
                 },
               }}
             >
-              {part}
-            </ReactMarkdown>
-          );
-        }
-        return null;
-      }).filter(Boolean);
-
-      return <>{parts}</>;
-    }
-
-    // 处理流式消息
-    const parts = content.split(/(<think>[\s\S]*?<\/think>)/g).map((part, index) => {
-      if (part.startsWith('<think>')) {
-        const cleanContent = part
-          .replace('<think>', '思考：')
-          .replace('</think>', '');
-        
-        return (
-          <div key={index} className="bg-purple-100 dark:bg-purple-900/30 p-4 rounded-lg my-2 text-purple-800 dark:text-purple-200">
-            <ReactMarkdown
-              className="prose max-w-none dark:prose-invert mt-1"
-              components={{
-                code({ className, children, ...props }) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  return match ? (
-                    <div className="relative group">
-                      <SyntaxHighlighter
-                        style={oneDark}
-                        language={match[1]}
-                        PreTag="div"
-                        {...props}
-                      >
-                        {String(children).replace(/\n$/, '')}
-                      </SyntaxHighlighter>
-                    </div>
-                  ) : (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
               {cleanContent}
             </ReactMarkdown>
           </div>
-        );
-      } else if (part.trim()) {
-        return (
-          <ReactMarkdown
-            key={index}
-            className="prose max-w-none dark:prose-invert mt-1"
-            components={{
-              code({ className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || '');
-                return match ? (
-                  <div className="relative group">
-                    <SyntaxHighlighter
-                      style={oneDark}
-                      language={match[1]}
-                      PreTag="div"
-                      {...props}
-                    >
-                      {String(children).replace(/\n$/, '')}
-                    </SyntaxHighlighter>
-                  </div>
-                ) : (
-                  <code className={className} {...props}>
-                    {children}
-                  </code>
-                );
-              },
-            }}
-          >
-            {part}
-          </ReactMarkdown>
-        );
+        ) : null;
       }
-      return null;
-    }).filter(Boolean);
+      
+      return part ? (
+        <ReactMarkdown
+          key={index}
+          className="prose max-w-none dark:prose-invert"
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+          components={{
+            code({ className, children, ...props }) {
+              const match = /language-(\w+)/.exec(className || '');
+              return match ? (
+                <div className="relative group">
+                  <SyntaxHighlighter
+                    style={oneDark}
+                    language={match[1]}
+                    PreTag="div"
+                    {...props}
+                  >
+                    {String(children).replace(/\n$/, '')}
+                  </SyntaxHighlighter>
+                  <button
+                    onClick={() => handleCopy(String(children))}
+                    className="absolute top-2 right-2 p-2 rounded bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    复制
+                  </button>
+                </div>
+              ) : (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            },
+          }}
+        >
+          {part}
+        </ReactMarkdown>
+      ) : null;
+    });
 
-    return <>{parts}</>;
+    return <div>{parts}</div>;
   };
 
+  const menuItems: MenuItemProps[] = [
+    { 
+      label: 'Settings', 
+      icon: <Settings size={20} />, 
+      onClick: () => setShowSettings(!showSettings) 
+    },
+    { label: 'Messages', icon: <MessageSquare size={20} />, onClick: () => {} },
+    { label: 'Toggle Theme', icon: isDarkMode ? <Sun size={20} /> : <Moon size={20} />, onClick: () => setIsDarkMode(!isDarkMode) }
+  ];
+
   return (
-    <div className={`flex h-screen overflow-hidden font-sans text-base ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
+    <div className={`flex h-screen overflow-hidden font-sans text-base ${isDarkMode ? 'dark bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
       {/* Left Column - Menu */}
-      <div className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300'} w-16 flex flex-col items-center py-4 space-y-6 border-r relative`}>
-        {menuItems.map((item, idx) => (
+      <div className={`w-16 flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'} border-r flex flex-col items-center py-4`}>
+        {menuItems.map(({ label, icon, onClick }) => (
           <div
-            key={idx}
+            key={label}
             className="relative"
-            onMouseEnter={(e) => handleMouseEnter(item.label, e)}
-            onMouseLeave={() => {
-              setHovered(null);
-              setTooltipPositions({});
-            }}
+            onMouseEnter={(e) => handleMouseEnter(label, e)}
+            onMouseLeave={() => setHovered(null)}
           >
             <button
-              className={`p-2 rounded ${
-                isDarkMode 
-                  ? 'hover:bg-gray-700' 
+              className={`p-3 rounded-lg mb-2 ${
+                isDarkMode
+                  ? 'hover:bg-gray-800'
                   : 'hover:bg-gray-200'
               }`}
-              onClick={item.onClick}
+              onClick={onClick}
             >
-              {item.icon}
+              {icon}
             </button>
             <AnimatePresence>
-              {hovered === item.label && (
-                <Tooltip 
-                  text={item.label} 
-                  position={tooltipPositions[item.label] || 'top'}
+              {hovered === label && (
+                <Tooltip
+                  text={label}
+                  position={tooltipPositions[label]}
                 />
               )}
             </AnimatePresence>
           </div>
         ))}
-
-        {!sidebarOpen && (
-          <div
-            className="relative mt-auto mb-4"
-            onMouseEnter={() => setHovered('Expand')}
-            onMouseLeave={() => setHovered(null)}
-          >
-            <button
-              className="w-4 h-4 bg-yellow-400 rounded-full shadow-lg hover:scale-110 transition-transform"
-              onClick={() => setSidebarOpen(true)}
-            />
-            <AnimatePresence>
-              {hovered === 'Expand' && <Tooltip text="展开侧边栏" />}
-            </AnimatePresence>
-          </div>
-        )}
       </div>
 
       {/* Middle Column - Sidebar */}
@@ -357,7 +293,7 @@ export default function ChatStream() {
         className={`${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'} overflow-hidden border-r`}
       >
         <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-lg font-semibold">主题</h2>
+          <h2 className="text-lg font-semibold">设置</h2>
           <button
             className={`p-1 rounded ${
               isDarkMode 
@@ -370,100 +306,184 @@ export default function ChatStream() {
             <PanelLeft size={20} />
           </button>
         </div>
-        <div className="p-4 text-sm text-gray-400">默认主题</div>
+        <div className="p-4">
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">OpenAI API Key</label>
+            <input
+              type="password"
+              value={openAIKey}
+              onChange={(e) => updateOpenAIKey(e.target.value)}
+              onKeyPress={handleKeyPress}
+              className={`w-full p-2 rounded border ${
+                isDarkMode
+                  ? 'bg-gray-800 border-gray-700'
+                  : 'bg-white border-gray-300'
+              }`}
+              placeholder="sk-..."
+            />
+            {isLoadingModels && (
+              <div className="mt-2 text-sm text-blue-500">
+                正在加载模型列表...
+              </div>
+            )}
+            {modelError && (
+              <div className="mt-2 text-sm text-red-500">
+                {modelError}
+              </div>
+            )}
+          </div>
+        </div>
       </motion.div>
 
       {/* Right Column - Chat Panel */}
       <div className="flex-1 flex flex-col">
         <div className="h-12 px-4 flex items-center border-b text-sm justify-between">
-          <span>deepseek-r1:latest | OneBirdStudio</span>
-          <div className="flex items-center gap-2">
-            {!isServiceAvailable ? (
-              <div className="flex items-center text-red-500 text-sm">
-                <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
-                Ollama 服务未运行
+          <div className="relative" ref={modelSelectRef}>
+            <button
+              onClick={() => setShowModelSelect(!showModelSelect)}
+              className={`flex items-center space-x-2 px-3 py-1 rounded ${
+                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+              }`}
+            >
+              <span>{selectedModel.name}</span>
+              <ChevronDown size={16} />
+            </button>
+            
+            {showModelSelect && (
+              <div className={`absolute top-full left-0 mt-1 w-64 rounded-lg shadow-lg ${
+                isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+              } border overflow-hidden z-10`}>
+                <div className="max-h-64 overflow-y-auto">
+                  {availableModels.map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => {
+                        setSelectedModel(model);
+                        setShowModelSelect(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 ${
+                        isDarkMode
+                          ? 'hover:bg-gray-700'
+                          : 'hover:bg-gray-100'
+                      } ${
+                        selectedModel.id === model.id
+                          ? isDarkMode
+                            ? 'bg-gray-700'
+                            : 'bg-gray-100'
+                          : ''
+                      }`}
+                    >
+                      <div className="font-medium">{model.name}</div>
+                      <div className="text-xs text-gray-500">
+                        {model.provider === 'ollama' ? 'Ollama' : 'OpenAI'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            ) : !isModelAvailable ? (
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {selectedModel.provider === 'ollama' ? (
+              !isServiceAvailable ? (
+                <div className="flex items-center text-red-500 text-sm">
+                  <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                  Ollama 服务未运行
+                </div>
+              ) : !isModelAvailable ? (
+                <div className="flex items-center text-yellow-500 text-sm">
+                  <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                  未找到 {selectedModel.name} 模型
+                </div>
+              ) : (
+                <div className="flex items-center text-green-500 text-sm">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  服务正常
+                </div>
+              )
+            ) : !openAIKey ? (
               <div className="flex items-center text-yellow-500 text-sm">
                 <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-                未找到 deepseek-r1:latest 模型
+                请设置 OpenAI API Key
               </div>
             ) : (
               <div className="flex items-center text-green-500 text-sm">
                 <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                服务正常
+                OpenAI 就绪
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex-1 p-4 overflow-y-auto space-y-4">
-          {!isServiceAvailable && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-sm">
-              <div className="font-semibold text-red-500 mb-1">⚠️ Ollama 服务未运行</div>
-              <div className="text-red-400">
-                请在终端运行以下命令启动服务：
-                <code className="bg-red-500/20 px-2 py-1 rounded ml-2">ollama serve</code>
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {messages.slice(0, -1).map((message, index) => (
+            <div
+              key={index}
+              className={`mb-4 ${
+                message.role === 'assistant'
+                  ? 'bg-gray-100 dark:bg-gray-800 rounded-lg p-4'
+                  : ''
+              }`}
+            >
+              <div className="font-medium mb-2">
+                {message.role === 'assistant' ? '助手' : '用户'}
               </div>
-            </div>
-          )}
-          {isServiceAvailable && !isModelAvailable && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 text-sm">
-              <div className="font-semibold text-yellow-500 mb-1">⚠️ 未找到 deepseek-r1:latest 模型</div>
-              <div className="text-yellow-400">
-                请在终端运行以下命令安装模型：
-                <code className="bg-yellow-500/20 px-2 py-1 rounded ml-2">ollama pull deepseek-r1:latest</code>
-              </div>
-            </div>
-          )}
-
-          {messages.map((msg, i) => (
-            <div key={i} className={`text-base ${msg.role === 'user' ? 'text-blue-400' : 'text-green-400'} relative group`}>
-              {msg.role === 'user' ? '🧑‍💻' : '🤖'}
-              {renderMarkdown(msg.content)}
+              {renderMarkdown(message.content)}
             </div>
           ))}
-
-          {isLoading && streamingMessage && (
-            <div className="text-base text-green-400 relative group">
-              🤖
-              {renderMarkdown(streamingMessage)}
+          {messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? (
+            <div className="mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+              <div className="font-medium mb-2">助手</div>
+              {renderMarkdown(streamingMessage || messages[messages.length - 1].content)}
             </div>
-          )}
-
+          ) : messages.length > 0 ? (
+            <>
+              <div className="mb-4">
+                <div className="font-medium mb-2">用户</div>
+                {renderMarkdown(messages[messages.length - 1].content)}
+              </div>
+              {streamingMessage && (
+                <div className="mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+                  <div className="font-medium mb-2">助手</div>
+                  {renderMarkdown(streamingMessage)}
+                </div>
+              )}
+            </>
+          ) : null}
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-2">
-            <textarea
+        {/* Input */}
+        <div className="p-4 border-t">
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <input
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="输入消息..."
               className={`flex-1 p-2 rounded-lg border ${
                 isDarkMode
-                  ? 'bg-gray-800 text-white border-gray-700'
-                  : 'bg-white text-gray-900 border-gray-300'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-              rows={1}
-              style={{ resize: 'none' }}
+                  ? 'bg-gray-800 border-gray-700 text-white'
+                  : 'bg-white border-gray-300 text-gray-900'
+              }`}
+              disabled={!isServiceAvailable || !isModelAvailable}
             />
             <button
               type="submit"
-              disabled={isLoading || !input.trim()}
-              className={`p-2 rounded-lg ${
-                isLoading || !input.trim()
-                  ? 'bg-gray-300 cursor-not-allowed'
-                  : isDarkMode
-                  ? 'bg-blue-600 hover:bg-blue-700'
-                  : 'bg-blue-500 hover:bg-blue-600'
-              } text-white`}
+              disabled={!input.trim() || isLoading || !isServiceAvailable || !isModelAvailable}
+              className={`px-4 py-2 rounded-lg ${
+                !input.trim() || isLoading || !isServiceAvailable || !isModelAvailable
+                  ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
+                  : 'bg-blue-500 hover:bg-blue-600 text-white'
+              }`}
             >
               <Send size={20} />
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );
