@@ -1,73 +1,129 @@
-import { useState, useEffect } from 'react'
-import { sendMessageToOllama, checkOllamaStatus, ChatMessage } from '../services/ollamaApi'
+import { useState, useEffect, useCallback } from 'react';
+import { ChatMessage, sendMessageToOllama, checkOllamaStatus } from '../services/ollamaApi';
+
+interface ChatState {
+  messages: ChatMessage[];
+  isLoading: boolean;
+  error: string | null;
+  isServiceAvailable: boolean;
+  isModelAvailable: boolean;
+}
+
+const SYSTEM_PROMPT = `你是一个有用的AI助手。请用简洁、专业的方式回答问题。`;
 
 export function useChatLLM() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [serviceStatus, setServiceStatus] = useState({
-    serviceAvailable: false,
-    modelAvailable: false
-  })
+  const [state, setState] = useState<ChatState>({
+    messages: [
+      {
+        role: 'system',
+        content: SYSTEM_PROMPT
+      }
+    ],
+    isLoading: false,
+    error: null,
+    isServiceAvailable: false,
+    isModelAvailable: false
+  });
 
-  // 定期检查服务状态
-  useEffect(() => {
-    const checkStatus = async () => {
+  const checkStatus = useCallback(async () => {
+    try {
       const status = await checkOllamaStatus();
-      console.log('Service status:', status);
-      setServiceStatus(status);
-    };
-
-    // 立即检查一次
-    checkStatus();
-
-    // 每 5 秒检查一次
-    const interval = setInterval(checkStatus, 5000);
-
-    return () => clearInterval(interval);
+      setState(prev => ({
+        ...prev,
+        isServiceAvailable: status.serviceAvailable,
+        isModelAvailable: status.modelAvailable,
+        error: null
+      }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        isServiceAvailable: false,
+        isModelAvailable: false,
+        error: error instanceof Error ? error.message : '检查服务状态时发生错误'
+      }));
+    }
   }, []);
 
-  const sendMessage = async (userInput: string) => {
-    const userMessage: ChatMessage = { role: 'user', content: userInput }
-    setMessages(prev => [...prev, userMessage])
-    setIsLoading(true)
+  useEffect(() => {
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, [checkStatus]);
+
+  const sendMessage = useCallback(async (userMessage: string) => {
+    if (!state.isServiceAvailable) {
+      setState(prev => ({
+        ...prev,
+        error: 'Ollama 服务未运行'
+      }));
+      return;
+    }
+
+    if (!state.isModelAvailable) {
+      setState(prev => ({
+        ...prev,
+        error: '模型未安装'
+      }));
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, { role: 'user', content: userMessage }],
+      isLoading: true,
+      error: null
+    }));
 
     try {
-      // 先检查服务状态
-      const status = await checkOllamaStatus()
-      if (!status.serviceAvailable) {
-        throw new Error('Ollama 服务未运行，请启动服务：ollama serve')
-      }
-      if (!status.modelAvailable) {
-        throw new Error('未找到 llama2 模型，请先安装：ollama pull llama2')
-      }
-
-      const allMessages = [...messages, userMessage]
-      const response = await sendMessageToOllama(allMessages)
-      
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: response
-      }
-      
-      setMessages(prev => [...prev, assistantMessage])
-    } catch (error) {
-      console.error('Error sending message:', error)
-      setMessages(prev => [
+      const response = await sendMessageToOllama([...state.messages, { role: 'user', content: userMessage }]);
+      setState(prev => ({
         ...prev,
-        { 
-          role: 'assistant', 
-          content: error instanceof Error ? error.message : '发生未知错误，请检查控制台输出'
-        }
-      ])
-    } finally {
-      setIsLoading(false)
+        messages: [...prev.messages, { role: 'assistant', content: response }],
+        isLoading: false
+      }));
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : '发送消息时发生错误',
+        isLoading: false
+      }));
     }
-  }
+  }, [state.isServiceAvailable, state.isModelAvailable, state.messages]);
+
+  const clearMessages = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      messages: [
+        {
+          role: 'system',
+          content: SYSTEM_PROMPT
+        }
+      ],
+      error: null
+    }));
+  }, []);
+
+  const updateSystemPrompt = useCallback((newPrompt: string) => {
+    setState(prev => ({
+      ...prev,
+      messages: [
+        {
+          role: 'system',
+          content: newPrompt
+        },
+        ...prev.messages.filter(msg => msg.role !== 'system')
+      ]
+    }));
+  }, []);
 
   return {
-    messages,
-    isLoading,
+    messages: state.messages,
+    isLoading: state.isLoading,
+    error: state.error,
+    isServiceAvailable: state.isServiceAvailable,
+    isModelAvailable: state.isModelAvailable,
     sendMessage,
-    serviceStatus
-  }
+    clearMessages,
+    updateSystemPrompt
+  };
 }
