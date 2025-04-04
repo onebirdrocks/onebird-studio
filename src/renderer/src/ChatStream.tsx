@@ -1,8 +1,8 @@
 import { useState, useEffect, ReactNode, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PanelLeft, Settings, MessageSquare, Sun, Moon, Send, ChevronDown } from 'lucide-react'
+import { PanelLeft, Settings, MessageSquare, Sun, Moon, Send, ChevronDown, Plus } from 'lucide-react'
 import { useChatLLMStream } from './hooks/useChatLLMStream'
-import { useModelSelection } from './hooks/useModelSelection'
+import { useModelSelection, Model } from './hooks/useModelSelection'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -11,6 +11,7 @@ import rehypeRaw from 'rehype-raw'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { Pluggable } from 'unified'
+import NewChatDialog from './components/NewChatDialog'
 
 import 'katex/dist/katex.min.css'
 
@@ -54,7 +55,17 @@ export default function ChatStream() {
   const [isThinking, setIsThinking] = useState(false)
   const [showModelSelect, setShowModelSelect] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const { messages, isLoading, sendMessage, isServiceAvailable, isModelAvailable } = useChatLLMStream()
+  const [isNewChatDialogOpen, setIsNewChatDialogOpen] = useState(false)
+  const { 
+    messages, 
+    isLoading, 
+    sendMessage, 
+    isServiceAvailable, 
+    isModelAvailable, 
+    clearMessages,
+    checkStatus,
+    initializeChat 
+  } = useChatLLMStream()
   const { 
     selectedModel, 
     setSelectedModel, 
@@ -243,19 +254,63 @@ export default function ChatStream() {
   };
 
   const menuItems: MenuItemProps[] = [
-    { 
-      label: 'Settings', 
-      icon: <Settings size={20} />, 
-      onClick: () => setShowSettings(!showSettings) 
+    {
+      label: '展开侧边栏',
+      icon: <PanelLeft size={20} />,
+      onClick: () => setSidebarOpen(true)
     },
-    { label: 'Messages', icon: <MessageSquare size={20} />, onClick: () => {} },
-    { label: 'Toggle Theme', icon: isDarkMode ? <Sun size={20} /> : <Moon size={20} />, onClick: () => setIsDarkMode(!isDarkMode) }
+    {
+      label: '消息记录',
+      icon: <MessageSquare size={20} />,
+      onClick: () => {}
+    },
+    {
+      label: '设置',
+      icon: <Settings size={20} />,
+      onClick: () => setShowSettings(true)
+    },
+    {
+      label: isDarkMode ? '切换浅色主题' : '切换深色主题',
+      icon: isDarkMode ? <Sun size={20} /> : <Moon size={20} />,
+      onClick: () => setIsDarkMode(!isDarkMode)
+    }
   ];
 
-  return (
-    <div className={`flex h-screen overflow-hidden font-sans text-base ${isDarkMode ? 'dark bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
-      {/* Left Column - Menu */}
-      <div className={`w-16 flex-shrink-0 ${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'} border-r flex flex-col items-center py-4`}>
+  const handleNewChat = (provider: string, model: string) => {
+    console.log('Creating new chat with provider:', provider, 'model:', model);
+    
+    // 清空当前对话状态
+    setStreamingMessage('');
+    setInput('');
+    clearMessages();
+    
+    // 更新选中的模型
+    const modelInfo = {
+      id: model,
+      name: model.split(':')[0].split('/').pop()?.replace(/^\w/, c => c.toUpperCase()) || model,
+      provider: provider as 'ollama' | 'openai'
+    };
+    
+    console.log('Setting new model:', modelInfo);
+    setSelectedModel(modelInfo);
+    
+    // 初始化新的聊天
+    initializeChat();
+    setIsNewChatDialogOpen(false);
+  };
+
+  const handleSendMessage = async () => {
+    if (!input.trim()) return;
+    setStreamingMessage('');
+    await sendMessage(input, (token) => {
+      setStreamingMessage(prev => prev + token);
+    });
+    setInput('');
+  };
+
+  const renderSidebar = () => (
+    <div className="flex flex-col h-full">
+      <div className="flex-1">
         {menuItems.map(({ label, icon, onClick }) => (
           <div
             key={label}
@@ -264,11 +319,11 @@ export default function ChatStream() {
             onMouseLeave={() => setHovered(null)}
           >
             <button
-              className={`p-3 rounded-lg mb-2 ${
+              className={`w-12 h-12 flex items-center justify-center rounded-lg mb-2 ${
                 isDarkMode
-                  ? 'hover:bg-gray-800'
-                  : 'hover:bg-gray-200'
-              }`}
+                  ? 'hover:bg-gray-700 text-gray-400 hover:text-white'
+                  : 'hover:bg-gray-200 text-gray-600 hover:text-gray-900'
+              } transition-colors`}
               onClick={onClick}
             >
               {icon}
@@ -283,208 +338,151 @@ export default function ChatStream() {
             </AnimatePresence>
           </div>
         ))}
-      </div>
-
-      {/* Middle Column - Sidebar */}
-      <motion.div
-        initial={{ width: 0, opacity: 0 }}
-        animate={{ width: sidebarOpen ? 256 : 0, opacity: sidebarOpen ? 1 : 0 }}
-        transition={{ duration: 0.3 }}
-        className={`${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'} overflow-hidden border-r`}
-      >
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-lg font-semibold">设置</h2>
+        {!sidebarOpen && (
           <button
-            className={`p-1 rounded ${
-              isDarkMode 
-                ? 'hover:bg-gray-700' 
-                : 'hover:bg-gray-200'
-            }`}
-            onClick={() => setSidebarOpen(false)}
-            title="收起侧边栏"
+            onClick={() => setSidebarOpen(true)}
+            className="w-full flex flex-col items-center mt-2 cursor-pointer"
           >
-            <PanelLeft size={20} />
+            <div className="w-3 h-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/50 hover:bg-blue-600 transition-colors"></div>
           </button>
-        </div>
-        <div className="p-4">
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">OpenAI API Key</label>
-            <input
-              type="password"
-              value={openAIKey}
-              onChange={(e) => updateOpenAIKey(e.target.value)}
-              onKeyPress={handleKeyPress}
-              className={`w-full p-2 rounded border ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700'
-                  : 'bg-white border-gray-300'
-              }`}
-              placeholder="sk-..."
-            />
-            {isLoadingModels && (
-              <div className="mt-2 text-sm text-blue-500">
-                正在加载模型列表...
-              </div>
-            )}
-            {modelError && (
-              <div className="mt-2 text-sm text-red-500">
-                {modelError}
-              </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Right Column - Chat Panel */}
-      <div className="flex-1 flex flex-col">
-        <div className="h-12 px-4 flex items-center border-b text-sm justify-between">
-          <div className="relative" ref={modelSelectRef}>
-            <button
-              onClick={() => setShowModelSelect(!showModelSelect)}
-              className={`flex items-center space-x-2 px-3 py-1 rounded ${
-                isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              }`}
-            >
-              <span>{selectedModel.name}</span>
-              <ChevronDown size={16} />
-            </button>
-            
-            {showModelSelect && (
-              <div className={`absolute top-full left-0 mt-1 w-64 rounded-lg shadow-lg ${
-                isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-              } border overflow-hidden z-10`}>
-                <div className="max-h-64 overflow-y-auto">
-                  {availableModels.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        setSelectedModel(model);
-                        setShowModelSelect(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 ${
-                        isDarkMode
-                          ? 'hover:bg-gray-700'
-                          : 'hover:bg-gray-100'
-                      } ${
-                        selectedModel.id === model.id
-                          ? isDarkMode
-                            ? 'bg-gray-700'
-                            : 'bg-gray-100'
-                          : ''
-                      }`}
-                    >
-                      <div className="font-medium">{model.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {model.provider === 'ollama' ? 'Ollama' : 'OpenAI'}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {selectedModel.provider === 'ollama' ? (
-              !isServiceAvailable ? (
-                <div className="flex items-center text-red-500 text-sm">
-                  <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
-                  Ollama 服务未运行
-                </div>
-              ) : !isModelAvailable ? (
-                <div className="flex items-center text-yellow-500 text-sm">
-                  <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-                  未找到 {selectedModel.name} 模型
-                </div>
-              ) : (
-                <div className="flex items-center text-green-500 text-sm">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                  服务正常
-                </div>
-              )
-            ) : !openAIKey ? (
-              <div className="flex items-center text-yellow-500 text-sm">
-                <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-                请设置 OpenAI API Key
-              </div>
-            ) : (
-              <div className="flex items-center text-green-500 text-sm">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                OpenAI 就绪
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {messages.slice(0, -1).map((message, index) => (
-            <div
-              key={index}
-              className={`mb-4 ${
-                message.role === 'assistant'
-                  ? 'bg-gray-100 dark:bg-gray-800 rounded-lg p-4'
-                  : ''
-              }`}
-            >
-              <div className="font-medium mb-2">
-                {message.role === 'assistant' ? '助手' : '用户'}
-              </div>
-              {renderMarkdown(message.content)}
-            </div>
-          ))}
-          {messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? (
-            <div className="mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-              <div className="font-medium mb-2">助手</div>
-              {renderMarkdown(streamingMessage || messages[messages.length - 1].content)}
-            </div>
-          ) : messages.length > 0 ? (
-            <>
-              <div className="mb-4">
-                <div className="font-medium mb-2">用户</div>
-                {renderMarkdown(messages[messages.length - 1].content)}
-              </div>
-              {streamingMessage && (
-                <div className="mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
-                  <div className="font-medium mb-2">助手</div>
-                  {renderMarkdown(streamingMessage)}
-                </div>
-              )}
-            </>
-          ) : null}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input */}
-        <div className="p-4 border-t">
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="输入消息..."
-              className={`flex-1 p-2 rounded-lg border ${
-                isDarkMode
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-white border-gray-300 text-gray-900'
-              }`}
-              disabled={!isServiceAvailable || !isModelAvailable}
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading || !isServiceAvailable || !isModelAvailable}
-              className={`px-4 py-2 rounded-lg ${
-                !input.trim() || isLoading || !isServiceAvailable || !isModelAvailable
-                  ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }`}
-            >
-              <Send size={20} />
-            </button>
-          </form>
-        </div>
+        )}
       </div>
     </div>
+  );
+
+  return (
+    <>
+      <div className={`flex h-screen overflow-hidden font-sans text-base ${isDarkMode ? 'dark bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
+        {/* Left Column - Menu */}
+        <div className="w-16 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-col items-center py-4">
+          {renderSidebar()}
+        </div>
+
+        {/* Middle Column - Sidebar */}
+        <motion.div
+          initial={{ width: 0, opacity: 0 }}
+          animate={{ width: sidebarOpen ? 256 : 0, opacity: sidebarOpen ? 1 : 0 }}
+          transition={{ duration: 0.3 }}
+          className={`${isDarkMode ? 'bg-gray-900 border-gray-700' : 'bg-gray-100 border-gray-300'} overflow-hidden border-r`}
+        >
+          <div className="flex justify-between items-center p-4 border-b">
+            <h2 className="text-lg font-semibold">设置</h2>
+            <button
+              className={`p-1 rounded ${
+                isDarkMode 
+                  ? 'hover:bg-gray-700' 
+                  : 'hover:bg-gray-200'
+              }`}
+              onClick={() => setSidebarOpen(false)}
+              title="收起侧边栏"
+            >
+              <PanelLeft size={20} />
+            </button>
+          </div>
+          <div className="p-4">
+            <button
+              onClick={() => setIsNewChatDialogOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mb-4"
+            >
+              <Plus size={20} />
+              新建对话
+            </button>
+            
+            {/* 显示当前模型信息 */}
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="mb-1">当前模型：</div>
+              <div className="font-medium">{selectedModel.name}</div>
+              <div className="text-xs mt-1">
+                {selectedModel.provider === 'ollama' ? 'Local Ollama' : 'OpenAI'}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Right Column - Chat Panel */}
+        <div className="flex-1 flex flex-col">
+          <div className="flex items-center justify-center p-4 border-b dark:border-gray-700">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              {selectedModel.provider === 'ollama' ? 'Local Ollama' : 'OpenAI'} - {selectedModel.name}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {messages.slice(0, -1).map((message, index) => (
+              <div
+                key={index}
+                className={`mb-4 ${
+                  message.role === 'assistant'
+                    ? 'bg-gray-100 dark:bg-gray-800 rounded-lg p-4'
+                    : ''
+                }`}
+              >
+                <div className="font-medium mb-2">
+                  {message.role === 'assistant' ? '助手' : '用户'}
+                </div>
+                {renderMarkdown(message.content)}
+              </div>
+            ))}
+            {messages.length > 0 && messages[messages.length - 1].role === 'assistant' ? (
+              <div className="mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+                <div className="font-medium mb-2">助手</div>
+                {renderMarkdown(streamingMessage || messages[messages.length - 1].content)}
+              </div>
+            ) : messages.length > 0 ? (
+              <>
+                <div className="mb-4">
+                  <div className="font-medium mb-2">用户</div>
+                  {renderMarkdown(messages[messages.length - 1].content)}
+                </div>
+                {streamingMessage && (
+                  <div className="mb-4 bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+                    <div className="font-medium mb-2">助手</div>
+                    {renderMarkdown(streamingMessage)}
+                  </div>
+                )}
+              </>
+            ) : null}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="p-4 border-t">
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="输入消息..."
+                className={`flex-1 p-2 rounded-lg border ${
+                  isDarkMode
+                    ? 'bg-gray-800 border-gray-700 text-white'
+                    : 'bg-white border-gray-300 text-gray-900'
+                }`}
+                disabled={!isServiceAvailable || !isModelAvailable}
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading || !isServiceAvailable || !isModelAvailable}
+                className={`px-4 py-2 rounded-lg ${
+                  !input.trim() || isLoading || !isServiceAvailable || !isModelAvailable
+                    ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
+              >
+                <Send size={20} />
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <NewChatDialog
+        isOpen={isNewChatDialogOpen}
+        onClose={() => setIsNewChatDialogOpen(false)}
+        onConfirm={handleNewChat}
+      />
+    </>
   );
 }

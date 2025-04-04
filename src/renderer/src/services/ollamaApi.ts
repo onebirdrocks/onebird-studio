@@ -1,3 +1,5 @@
+import { Model } from '../hooks/useModelSelection';
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -18,11 +20,13 @@ interface OllamaStatusResponse {
   isModelAvailable: boolean;
 }
 
-export const checkOllamaStatus = async (): Promise<OllamaStatusResponse> => {
+export const checkOllamaStatus = async (modelId: string): Promise<OllamaStatusResponse> => {
+  console.log('Checking Ollama status for model:', modelId);
   try {
     // 检查服务是否可用
     const versionResponse = await fetch(`${OLLAMA_API_BASE_URL}/api/version`);
     if (!versionResponse.ok) {
+      console.log('Ollama service not available:', versionResponse.status);
       return {
         isServiceAvailable: false,
         isModelAvailable: false
@@ -35,15 +39,18 @@ export const checkOllamaStatus = async (): Promise<OllamaStatusResponse> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ name: 'deepseek-r1:latest' })
+      body: JSON.stringify({ name: modelId })
     });
+
+    const isModelAvailable = modelResponse.ok;
+    console.log('Ollama model status:', { modelId, isAvailable: isModelAvailable });
 
     return {
       isServiceAvailable: true,
-      isModelAvailable: modelResponse.ok
+      isModelAvailable
     };
   } catch (error) {
-    console.error('Ollama 检查错误:', error);
+    console.error('Error checking Ollama status:', error);
     return {
       isServiceAvailable: false,
       isModelAvailable: false
@@ -56,6 +63,7 @@ export const sendMessageToOllamaStream = async (
   modelId: string,
   onToken: (token: string) => void
 ) => {
+  console.log('Sending message to Ollama:', { modelId, messages });
   const response = await fetch(`${OLLAMA_API_BASE_URL}/api/chat`, {
     method: 'POST',
     headers: {
@@ -69,7 +77,9 @@ export const sendMessageToOllamaStream = async (
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    const errorText = await response.text();
+    console.error('Ollama API error:', { status: response.status, error: errorText });
+    throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
   }
 
   const reader = response.body?.getReader();
@@ -96,11 +106,53 @@ export const sendMessageToOllamaStream = async (
             onToken(data.message.content);
           }
         } catch (error) {
-          console.error('Error parsing JSON:', error);
+          console.error('Error parsing Ollama response:', error);
         }
       }
     }
   } finally {
     reader.releaseLock();
+  }
+};
+
+export interface OllamaModel {
+  name: string;
+  modified_at: string;
+  size: number;
+  digest: string;
+  details: {
+    format: string;
+    family: string;
+    parameter_size: string;
+    quantization_level: string;
+  };
+}
+
+export const getOllamaModels = async (): Promise<Model[]> => {
+  try {
+    console.log('Fetching Ollama models from API...');
+    const response = await fetch(`${OLLAMA_API_BASE_URL}/api/tags`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    console.log('Raw Ollama API response:', data);
+    
+    if (!data.models || !Array.isArray(data.models)) {
+      console.error('Invalid response format from Ollama API:', data);
+      return [];
+    }
+
+    const models: Model[] = data.models.map(model => ({
+      id: model.name,
+      name: model.name.split(':')[0].split('/').pop()?.replace(/^\w/, c => c.toUpperCase()) || model.name,
+      provider: 'ollama' as const
+    }));
+
+    console.log('Processed Ollama models:', models);
+    return models;
+  } catch (error) {
+    console.error('Error fetching Ollama models:', error);
+    return [];
   }
 }; 

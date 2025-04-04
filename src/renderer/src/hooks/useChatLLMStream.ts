@@ -20,15 +20,22 @@ export const useChatLLMStream = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isServiceAvailable, setIsServiceAvailable] = useState(false);
   const [isModelAvailable, setIsModelAvailable] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [currentModelId, setCurrentModelId] = useState<string | null>(null);
   const { selectedModel } = useModelSelection();
 
   const checkStatus = useCallback(async () => {
+    if (!isInitialized) return;
+    
+    console.log('Checking status for model:', selectedModel);
     if (selectedModel.provider === 'ollama') {
       try {
-        const status = await checkOllamaStatus();
+        const status = await checkOllamaStatus(selectedModel.id);
+        console.log('Ollama status:', status);
         setIsServiceAvailable(status.isServiceAvailable);
         setIsModelAvailable(status.isModelAvailable);
       } catch (error) {
+        console.error('Error checking Ollama status:', error);
         setIsServiceAvailable(false);
         setIsModelAvailable(false);
       }
@@ -37,16 +44,24 @@ export const useChatLLMStream = () => {
       setIsServiceAvailable(true);
       setIsModelAvailable(true);
     }
-  }, [selectedModel]);
+  }, [selectedModel, isInitialized]);
 
   useEffect(() => {
+    if (!isInitialized) return;
+    
+    console.log('Model changed in useChatLLMStream:', selectedModel);
+    setCurrentModelId(selectedModel.id);
     checkStatus();
     const interval = setInterval(checkStatus, 5000);
     return () => clearInterval(interval);
-  }, [checkStatus]);
+  }, [checkStatus, selectedModel, isInitialized]);
 
   const sendMessage = async (content: string, onToken: (token: string) => void) => {
     if (!content.trim()) return;
+    if (!isInitialized) {
+      setIsInitialized(true);
+      await checkStatus();
+    }
 
     setIsLoading(true);
     const newUserMessage: Message = { role: 'user', content };
@@ -57,11 +72,9 @@ export const useChatLLMStream = () => {
       let accumulatedResponse = '';
       const processToken = (token: string) => {
         accumulatedResponse += token;
-        // 更新助手的回复
         setMessages(prev => {
           const lastMessage = prev[prev.length - 1];
           if (lastMessage.role === 'assistant') {
-            // 如果最后一条消息是助手的，更新它
             const updatedMessages = [...prev];
             updatedMessages[updatedMessages.length - 1] = {
               role: 'assistant',
@@ -69,48 +82,65 @@ export const useChatLLMStream = () => {
             };
             return updatedMessages;
           } else {
-            // 如果最后一条消息不是助手的，添加新的助手消息
             return [...prev, { role: 'assistant', content: accumulatedResponse }];
           }
         });
-        // 调用外部的 onToken 回调
         onToken(token);
       };
 
-      if (selectedModel.provider === 'ollama') {
-        await sendMessageToOllamaStream(
+      // 使用当前选中的模型
+      const modelToUse = currentModelId || selectedModel.id;
+      console.log('Sending message using model:', { provider: selectedModel.provider, id: modelToUse });
+
+      if (selectedModel.provider === 'openai') {
+        console.log('Using OpenAI API with model:', modelToUse);
+        await sendMessageToOpenAI(
           newMessages,
-          selectedModel.id,
+          modelToUse,
           processToken
         );
       } else {
-        await sendMessageToOpenAI(
+        console.log('Using Ollama API with model:', modelToUse);
+        await sendMessageToOllamaStream(
           newMessages,
-          selectedModel.id,
+          modelToUse,
           processToken
         );
       }
     } catch (error) {
       console.error('Error sending message:', error);
+      // 如果发送失败，移除最后一条消息
+      setMessages(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const clearMessages = () => {
+  const clearMessages = useCallback(() => {
+    console.log('Clearing messages');
     setMessages([
       {
         role: 'system',
         content: SYSTEM_PROMPT
       }
     ]);
-  };
+  }, []);
 
-  const updateSystemPrompt = (prompt: string) => {
+  const updateSystemPrompt = useCallback((prompt: string) => {
+    console.log('Updating system prompt:', prompt);
     const systemMessage: Message = { role: 'system', content: prompt };
-    const userMessages = messages.filter(msg => msg.role !== 'system');
-    setMessages([systemMessage, ...userMessages]);
-  };
+    setMessages(prev => {
+      const userMessages = prev.filter(msg => msg.role !== 'system');
+      return [systemMessage, ...userMessages];
+    });
+  }, []);
+
+  const initializeChat = useCallback(() => {
+    console.log('Initializing chat with model:', selectedModel);
+    setIsInitialized(true);
+    setCurrentModelId(selectedModel.id);
+    checkStatus();
+  }, [checkStatus, selectedModel]);
 
   return {
     messages,
@@ -119,6 +149,8 @@ export const useChatLLMStream = () => {
     clearMessages,
     updateSystemPrompt,
     isServiceAvailable,
-    isModelAvailable
+    isModelAvailable,
+    checkStatus,
+    initializeChat
   };
 };
