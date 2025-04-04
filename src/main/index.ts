@@ -5,6 +5,7 @@ import fs from 'fs'
 import icon from '../../resources/icon.png?asset'
 
 const configPath = join(app.getPath('userData'), 'config.json')
+const DEFAULT_ZOOM_LEVEL = -0.5  // 可以根据需要调整这个值
 
 function isFirstLaunch(): boolean {
   try {
@@ -30,9 +31,13 @@ function createWindow(): void {
     webPreferences: {
       //preload: join(__dirname, '../preload/index.js'),
       preload: join(__dirname, '../../out/preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      zoomFactor: 1.0
     }
   })
+
+  // 设置初始缩放级别
+  mainWindow.webContents.setZoomLevel(DEFAULT_ZOOM_LEVEL)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -69,16 +74,29 @@ app.whenReady().then(() => {
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+    
+    window.webContents.on('did-finish-load', () => {
+      window.webContents.setZoomLevel(DEFAULT_ZOOM_LEVEL)
+    })
   })
 
   ipcMain.on('go-main', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
   
+    // 保存当前缩放级别
+    const currentZoom = win.webContents.getZoomLevel()
+    
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-      win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+      win.loadURL(process.env['ELECTRON_RENDERER_URL']).then(() => {
+        // 加载完成后恢复缩放级别
+        win.webContents.setZoomLevel(DEFAULT_ZOOM_LEVEL)
+      })
     } else {
-      win.loadFile(join(__dirname, '../renderer/index.html'))
+      win.loadFile(join(__dirname, '../renderer/index.html')).then(() => {
+        // 加载完成后恢复缩放级别
+        win.webContents.setZoomLevel(DEFAULT_ZOOM_LEVEL)
+      })
     }
   })
   
