@@ -1,121 +1,7 @@
-import { Model } from '../hooks/useModelSelection';
+import type { Message } from '../hooks/useChatLLMStream';
+import type { Model } from '../hooks/useModelSelection';
 
-export interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
-const OLLAMA_API_BASE_URL = 'http://localhost:11434';
-
-interface OllamaResponse {
-  message: {
-    role: string;
-    content: string;
-  };
-  done: boolean;
-}
-
-interface OllamaStatusResponse {
-  isServiceAvailable: boolean;
-  isModelAvailable: boolean;
-}
-
-export const checkOllamaStatus = async (modelId: string): Promise<OllamaStatusResponse> => {
-  console.log('Checking Ollama status for model:', modelId);
-  try {
-    // 检查服务是否可用
-    const versionResponse = await fetch(`${OLLAMA_API_BASE_URL}/api/version`);
-    if (!versionResponse.ok) {
-      console.log('Ollama service not available:', versionResponse.status);
-      return {
-        isServiceAvailable: false,
-        isModelAvailable: false
-      };
-    }
-
-    // 检查模型是否可用
-    const modelResponse = await fetch(`${OLLAMA_API_BASE_URL}/api/show`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: modelId })
-    });
-
-    const isModelAvailable = modelResponse.ok;
-    console.log('Ollama model status:', { modelId, isAvailable: isModelAvailable });
-
-    return {
-      isServiceAvailable: true,
-      isModelAvailable
-    };
-  } catch (error) {
-    console.error('Error checking Ollama status:', error);
-    return {
-      isServiceAvailable: false,
-      isModelAvailable: false
-    };
-  }
-};
-
-export const sendMessageToOllamaStream = async (
-  messages: Message[],
-  modelId: string,
-  onToken: (token: string) => void
-) => {
-  console.log('Sending message to Ollama:', { modelId, messages });
-  const response = await fetch(`${OLLAMA_API_BASE_URL}/api/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelId,
-      messages: messages,
-      stream: true
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Ollama API error:', { status: response.status, error: errorText });
-    throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
-  }
-
-  const reader = response.body?.getReader();
-  const decoder = new TextDecoder();
-
-  if (!reader) {
-    throw new Error('No reader available');
-  }
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (line.trim() === '') continue;
-
-        try {
-          const data: OllamaResponse = JSON.parse(line);
-          if (data.message?.content) {
-            onToken(data.message.content);
-          }
-        } catch (error) {
-          console.error('Error parsing Ollama response:', error);
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-};
-
-export interface OllamaModel {
+interface OllamaApiModel {
   name: string;
   modified_at: string;
   size: number;
@@ -128,31 +14,112 @@ export interface OllamaModel {
   };
 }
 
-export const getOllamaModels = async (): Promise<Model[]> => {
+interface OllamaApiResponse {
+  models: OllamaApiModel[];
+}
+
+interface OllamaChatResponse {
+  message: {
+    role: string;
+    content: string;
+  };
+  done: boolean;
+}
+
+export async function checkOllamaStatus(): Promise<boolean> {
   try {
-    console.log('Fetching Ollama models from API...');
-    const response = await fetch(`${OLLAMA_API_BASE_URL}/api/tags`);
+    const response = await fetch('http://localhost:11434/api/tags');
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const data = await response.json();
-    console.log('Raw Ollama API response:', data);
-    
-    if (!data.models || !Array.isArray(data.models)) {
-      console.error('Invalid response format from Ollama API:', data);
-      return [];
-    }
+    return true;
+  } catch (error) {
+    console.error('Error checking Ollama status:', error);
+    return false;
+  }
+}
 
-    const models: Model[] = data.models.map(model => ({
+export async function getOllamaModels(): Promise<Model[]> {
+  try {
+    const response = await fetch('http://localhost:11434/api/tags');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data: OllamaApiResponse = await response.json();
+    
+    return data.models.map(model => ({
       id: model.name,
-      name: model.name.split(':')[0].split('/').pop()?.replace(/^\w/, c => c.toUpperCase()) || model.name,
+      name: model.name.split(':')[0],
       provider: 'ollama' as const
     }));
-
-    console.log('Processed Ollama models:', models);
-    return models;
   } catch (error) {
     console.error('Error fetching Ollama models:', error);
-    return [];
+    throw error;
   }
-}; 
+}
+
+export async function sendMessageToOllamaStream(
+  messages: Message[],
+  modelId: string,
+  onToken: (token: string) => void,
+  onError: (error: Error) => void,
+  onComplete: () => void
+): Promise<void> {
+  try {
+    const response = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: messages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })),
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        try {
+          const data: OllamaChatResponse = JSON.parse(line);
+          if (data.message?.content) {
+            onToken(data.message.content);
+          }
+          if (data.done) {
+            onComplete();
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing response line:', error);
+          continue;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in sendMessageToOllamaStream:', error);
+    onError(error instanceof Error ? error : new Error(String(error)));
+  }
+} 

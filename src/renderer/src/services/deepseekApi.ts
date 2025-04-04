@@ -1,17 +1,20 @@
 import type { Message } from '../hooks/useChatLLMStream';
 import type { Model } from '../hooks/useModelSelection';
 
-let openAIKey = '';
+let deepseekKey = '';
 
-export function initOpenAI(key: string) {
-  openAIKey = key;
+export function initDeepSeek(key: string) {
+  if (!key.trim().startsWith('dsk-') && !key.trim().startsWith('sk-')) {
+    throw new Error('DeepSeek API Key 格式错误，应以 "dsk-" 或 "sk-" 开头');
+  }
+  deepseekKey = key.trim();
 }
 
-export async function getOpenAIModels(): Promise<Model[]> {
+export async function getDeepSeekModels(): Promise<Model[]> {
   try {
-    const response = await fetch('https://api.openai.com/v1/models', {
+    const response = await fetch('https://api.deepseek.com/v1/models', {
       headers: {
-        'Authorization': `Bearer ${openAIKey}`
+        'Authorization': `Bearer ${deepseekKey}`
       }
     });
 
@@ -20,22 +23,24 @@ export async function getOpenAIModels(): Promise<Model[]> {
     }
 
     const data = await response.json();
+    console.log('DeepSeek models response:', data);
+
     const supportedModels = data.data
-      .filter((model: any) => model.id.startsWith('gpt'))
+      .filter((model: any) => model.id.includes('chat'))
       .map((model: any) => ({
         id: model.id,
         name: model.id,
-        provider: 'openai' as const
+        provider: 'deepseek' as const
       }));
 
     return supportedModels;
   } catch (error) {
-    console.error('Error fetching OpenAI models:', error);
+    console.error('Error fetching DeepSeek models:', error);
     throw error;
   }
 }
 
-export async function sendMessageToOpenAIStream(
+export async function sendMessageToDeepSeekStream(
   messages: Message[],
   modelId: string,
   onToken: (token: string) => void,
@@ -43,11 +48,11 @@ export async function sendMessageToOpenAIStream(
   onComplete: () => void
 ): Promise<void> {
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openAIKey}`
+        'Authorization': `Bearer ${deepseekKey}`
       },
       body: JSON.stringify({
         model: modelId,
@@ -100,7 +105,7 @@ export async function sendMessageToOpenAIStream(
       }
     }
   } catch (error) {
-    console.error('Error in sendMessageToOpenAIStream:', error);
+    console.error('Error in sendMessageToDeepSeekStream:', error);
     onError(error instanceof Error ? error : new Error(String(error)));
   }
 } 

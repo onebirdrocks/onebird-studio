@@ -1,156 +1,169 @@
-import { useState, useEffect, useCallback } from 'react';
-import { sendMessageToOllamaStream, checkOllamaStatus } from '../services/ollamaApi';
-import { sendMessageToOpenAI } from '../services/openaiApi';
+import { useState, useCallback, useEffect } from 'react';
+import { checkOllamaStatus, sendMessageToOllamaStream } from '../services/ollamaApi';
+import { sendMessageToOpenAIStream } from '../services/openaiApi';
+import { sendMessageToDeepSeekStream } from '../services/deepseekApi';
 import { useModelSelection } from './useModelSelection';
 
 export interface Message {
-  role: 'user' | 'assistant' | 'system';
+  role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
-const SYSTEM_PROMPT = `你是一个有用的AI助手。请用简洁、专业的方式回答问题。`;
-
-export const useChatLLMStream = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'system',
-      content: SYSTEM_PROMPT
-    }
-  ]);
+export function useChatLLMStream() {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isServiceAvailable, setIsServiceAvailable] = useState(false);
-  const [isModelAvailable, setIsModelAvailable] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [currentModelId, setCurrentModelId] = useState<string | null>(null);
+  const [isServiceAvailable, setIsServiceAvailable] = useState(true);
+  const [isModelAvailable, setIsModelAvailable] = useState(true);
   const { selectedModel } = useModelSelection();
 
   const checkStatus = useCallback(async () => {
-    if (!isInitialized) return;
-    
-    console.log('Checking status for model:', selectedModel);
-    if (selectedModel.provider === 'ollama') {
-      try {
-        const status = await checkOllamaStatus(selectedModel.id);
-        console.log('Ollama status:', status);
-        setIsServiceAvailable(status.isServiceAvailable);
-        setIsModelAvailable(status.isModelAvailable);
-      } catch (error) {
-        console.error('Error checking Ollama status:', error);
+    try {
+      console.log('Checking service status for provider:', selectedModel?.provider);
+      if (!selectedModel) {
         setIsServiceAvailable(false);
         setIsModelAvailable(false);
+        return;
       }
-    } else {
-      // OpenAI 的状态检查在 useModelSelection 中处理
-      setIsServiceAvailable(true);
-      setIsModelAvailable(true);
+
+      switch (selectedModel.provider) {
+        case 'ollama':
+          const isOllamaAvailable = await checkOllamaStatus();
+          setIsServiceAvailable(isOllamaAvailable);
+          setIsModelAvailable(isOllamaAvailable);
+          break;
+        case 'openai':
+        case 'deepseek':
+          // 对于云服务，我们假设服务总是可用的
+          setIsServiceAvailable(true);
+          setIsModelAvailable(true);
+          break;
+        default:
+          setIsServiceAvailable(false);
+          setIsModelAvailable(false);
+      }
+    } catch (error) {
+      console.error('Error checking service status:', error);
+      setIsServiceAvailable(false);
+      setIsModelAvailable(false);
     }
-  }, [selectedModel, isInitialized]);
+  }, [selectedModel]);
 
-  useEffect(() => {
-    if (!isInitialized) return;
-    
-    console.log('Model changed in useChatLLMStream:', selectedModel);
-    setCurrentModelId(selectedModel.id);
-    checkStatus();
-    const interval = setInterval(checkStatus, 5000);
-    return () => clearInterval(interval);
-  }, [checkStatus, selectedModel, isInitialized]);
+  const initializeChat = useCallback(() => {
+    setMessages([]);
+    setIsLoading(false);
+    setIsServiceAvailable(true);
+    setIsModelAvailable(true);
+  }, []);
 
-  const sendMessage = async (content: string, onToken: (token: string) => void) => {
-    if (!content.trim()) return;
-    if (!isInitialized) {
-      setIsInitialized(true);
-      await checkStatus();
+  const sendMessage = useCallback(async (content: string) => {
+    if (!selectedModel) {
+      console.error('No model selected');
+      return;
     }
 
+    console.log('Sending message with model:', selectedModel);
     setIsLoading(true);
-    const newUserMessage: Message = { role: 'user', content };
-    const newMessages = [...messages, newUserMessage];
-    setMessages(newMessages);
+
+    const newMessage: Message = {
+      role: 'user',
+      content
+    };
+
+    setMessages(prev => [...prev, newMessage]);
+
+    let streamingMessage = '';
+    const onToken = (token: string) => {
+      streamingMessage += token;
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage?.role === 'assistant') {
+          lastMessage.content = streamingMessage;
+        } else {
+          newMessages.push({
+            role: 'assistant',
+            content: streamingMessage
+          });
+        }
+        return newMessages;
+      });
+    };
+
+    const onError = (error: Error) => {
+      console.error('Error in message stream:', error);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `错误: ${error.message}`
+        }
+      ]);
+      setIsLoading(false);
+    };
+
+    const onComplete = () => {
+      console.log('Message stream completed');
+      setIsLoading(false);
+    };
 
     try {
-      let accumulatedResponse = '';
-      const processToken = (token: string) => {
-        accumulatedResponse += token;
-        setMessages(prev => {
-          const lastMessage = prev[prev.length - 1];
-          if (lastMessage.role === 'assistant') {
-            const updatedMessages = [...prev];
-            updatedMessages[updatedMessages.length - 1] = {
-              role: 'assistant',
-              content: accumulatedResponse
-            };
-            return updatedMessages;
-          } else {
-            return [...prev, { role: 'assistant', content: accumulatedResponse }];
-          }
-        });
-        onToken(token);
-      };
-
-      // 使用当前选中的模型
-      const modelToUse = currentModelId || selectedModel.id;
-      console.log('Sending message using model:', { provider: selectedModel.provider, id: modelToUse });
-
-      if (selectedModel.provider === 'openai') {
-        console.log('Using OpenAI API with model:', modelToUse);
-        await sendMessageToOpenAI(
-          newMessages,
-          modelToUse,
-          processToken
-        );
-      } else {
-        console.log('Using Ollama API with model:', modelToUse);
-        await sendMessageToOllamaStream(
-          newMessages,
-          modelToUse,
-          processToken
-        );
+      const allMessages = [...messages, newMessage];
+      
+      switch (selectedModel.provider) {
+        case 'ollama':
+          await sendMessageToOllamaStream(
+            allMessages,
+            selectedModel.id,
+            onToken,
+            onError,
+            onComplete
+          );
+          break;
+        case 'openai':
+          await sendMessageToOpenAIStream(
+            allMessages,
+            selectedModel.id,
+            onToken,
+            onError,
+            onComplete
+          );
+          break;
+        case 'deepseek':
+          await sendMessageToDeepSeekStream(
+            allMessages,
+            selectedModel.id,
+            onToken,
+            onError,
+            onComplete
+          );
+          break;
+        default:
+          throw new Error(`不支持的提供商: ${selectedModel.provider}`);
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      // 如果发送失败，移除最后一条消息
-      setMessages(prev => prev.slice(0, -1));
-    } finally {
-      setIsLoading(false);
+      onError(error instanceof Error ? error : new Error(String(error)));
     }
-  };
+  }, [messages, selectedModel]);
 
-  const clearMessages = useCallback(() => {
-    console.log('Clearing messages');
-    setMessages([
-      {
-        role: 'system',
-        content: SYSTEM_PROMPT
-      }
-    ]);
-  }, []);
-
-  const updateSystemPrompt = useCallback((prompt: string) => {
-    console.log('Updating system prompt:', prompt);
-    const systemMessage: Message = { role: 'system', content: prompt };
-    setMessages(prev => {
-      const userMessages = prev.filter(msg => msg.role !== 'system');
-      return [systemMessage, ...userMessages];
-    });
-  }, []);
-
-  const initializeChat = useCallback(() => {
-    console.log('Initializing chat with model:', selectedModel);
-    setIsInitialized(true);
-    setCurrentModelId(selectedModel.id);
+  // 初始化时检查服务状态
+  useEffect(() => {
     checkStatus();
-  }, [checkStatus, selectedModel]);
+  }, [checkStatus]);
+
+  // 当选中的模型改变时重新检查状态
+  useEffect(() => {
+    checkStatus();
+  }, [selectedModel, checkStatus]);
 
   return {
     messages,
     isLoading,
     sendMessage,
-    clearMessages,
-    updateSystemPrompt,
     isServiceAvailable,
     isModelAvailable,
+    clearMessages: initializeChat,
     checkStatus,
     initializeChat
   };
-};
+}

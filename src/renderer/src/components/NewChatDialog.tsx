@@ -3,11 +3,12 @@ import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { initOpenAI, getOpenAIModels } from '../services/openaiApi';
 import { getOllamaModels } from '../services/ollamaApi';
+import { initDeepSeek, getDeepSeekModels } from '../services/deepseekApi';
 
 interface NewChatDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (provider: string, model: string) => void;
+  onConfirm: (model: { id: string; name: string; provider: 'ollama' | 'openai' | 'deepseek' }) => void;
 }
 
 interface Model {
@@ -24,10 +25,11 @@ const OLLAMA_MODELS = [
 ];
 
 export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDialogProps) {
-  const [provider, setProvider] = useState<'ollama' | 'openai'>('ollama');
+  const [provider, setProvider] = useState<'ollama' | 'openai' | 'deepseek'>('ollama');
   const [openAIKey, setOpenAIKey] = useState('');
-  const [models, setModels] = useState<Model[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [deepseekKey, setDeepseekKey] = useState('');
+  const [models, setModels] = useState<Model[]>(OLLAMA_MODELS);
+  const [selectedModel, setSelectedModel] = useState<string>(OLLAMA_MODELS[0].id);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -38,19 +40,24 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
       console.log('Loading Ollama models in dialog...');
       const ollamaModels = await getOllamaModels();
       console.log('Loaded Ollama models:', ollamaModels);
-      setModels(ollamaModels);
-      if (ollamaModels.length > 0) {
+      if (ollamaModels.length === 0) {
+        setModels(OLLAMA_MODELS);
+        setSelectedModel(OLLAMA_MODELS[0].id);
+      } else {
+        setModels(ollamaModels);
         setSelectedModel(ollamaModels[0].id);
       }
     } catch (err) {
       console.error('Error loading Ollama models:', err);
-      setError('加载 Ollama 模型失败');
+      setError('加载 Ollama 模型失败，使用默认模型列表');
+      setModels(OLLAMA_MODELS);
+      setSelectedModel(OLLAMA_MODELS[0].id);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleProviderChange = async (newProvider: 'ollama' | 'openai') => {
+  const handleProviderChange = async (newProvider: 'ollama' | 'openai' | 'deepseek') => {
     console.log('Changing provider to:', newProvider);
     setProvider(newProvider);
     setError(null);
@@ -59,6 +66,14 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
     
     if (newProvider === 'ollama') {
       await loadOllamaModels();
+    } else if (newProvider === 'openai') {
+      if (openAIKey) {
+        await handleOpenAIKeySubmit();
+      }
+    } else if (newProvider === 'deepseek') {
+      if (deepseekKey) {
+        await handleDeepSeekKeySubmit();
+      }
     }
   };
 
@@ -67,11 +82,13 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
     if (isOpen) {
       if (provider === 'ollama') {
         loadOllamaModels();
-      } else if (openAIKey) {
+      } else if (provider === 'openai' && openAIKey) {
         handleOpenAIKeySubmit();
+      } else if (provider === 'deepseek' && deepseekKey) {
+        handleDeepSeekKeySubmit();
       }
     }
-  }, [isOpen, provider]);
+  }, [isOpen]);
 
   const handleOpenAIKeySubmit = async () => {
     setIsLoading(true);
@@ -98,15 +115,63 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
     }
   };
 
+  const handleDeepSeekKeySubmit = async () => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      console.log('Submitting DeepSeek key...');
+      initDeepSeek(deepseekKey);
+      console.log('Initialized DeepSeek with key');
+      
+      const deepseekModels = await getDeepSeekModels();
+      console.log('Loaded DeepSeek models:', deepseekModels);
+      
+      if (deepseekModels.length === 0) {
+        throw new Error('没有可用的 DeepSeek 模型');
+      }
+      
+      setModels(deepseekModels);
+      setSelectedModel(deepseekModels[0].id);
+    } catch (err) {
+      console.error('Error loading DeepSeek models:', err);
+      setError(err instanceof Error ? err.message : '加载 DeepSeek 模型失败');
+      setModels([]);
+      setSelectedModel('');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleConfirm = () => {
     if (!selectedModel) {
       setError('请选择一个模型');
       return;
     }
-    console.log('Confirming model selection:', { provider, model: selectedModel });
-    onConfirm(provider, selectedModel);
+
+    const modelInfo = models.find(m => m.id === selectedModel);
+    if (!modelInfo) {
+      setError('所选模型不存在');
+      return;
+    }
+
+    const selectedModelInfo = {
+      id: modelInfo.id,
+      name: modelInfo.name,
+      provider
+    };
+
+    console.log('Confirming model selection:', selectedModelInfo);
+    onConfirm(selectedModelInfo);
     onClose();
   };
+
+  // 从 localStorage 加载 API keys
+  useEffect(() => {
+    const savedOpenAIKey = localStorage.getItem('openai_key');
+    const savedDeepSeekKey = localStorage.getItem('deepseek_key');
+    if (savedOpenAIKey) setOpenAIKey(savedOpenAIKey);
+    if (savedDeepSeekKey) setDeepseekKey(savedDeepSeekKey);
+  }, []);
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -150,11 +215,12 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
                       </label>
                       <select
                         value={provider}
-                        onChange={(e) => handleProviderChange(e.target.value as 'ollama' | 'openai')}
+                        onChange={(e) => handleProviderChange(e.target.value as 'ollama' | 'openai' | 'deepseek')}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       >
                         <option value="ollama">Local Ollama</option>
                         <option value="openai">OpenAI</option>
+                        <option value="deepseek">DeepSeek</option>
                       </select>
                     </div>
 
@@ -175,6 +241,31 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
                             type="button"
                             onClick={handleOpenAIKeySubmit}
                             disabled={isLoading || !openAIKey}
+                            className="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 dark:bg-gray-600 dark:border-gray-600 dark:text-white dark:hover:bg-gray-500"
+                          >
+                            {isLoading ? '加载中...' : '验证'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {provider === 'deepseek' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          DeepSeek API Key
+                        </label>
+                        <div className="mt-1 flex rounded-md shadow-sm">
+                          <input
+                            type="password"
+                            value={deepseekKey}
+                            onChange={(e) => setDeepseekKey(e.target.value)}
+                            className="flex-1 rounded-l-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            placeholder="dsk-... 或 sk-..."
+                          />
+                          <button
+                            type="button"
+                            onClick={handleDeepSeekKeySubmit}
+                            disabled={isLoading || !deepseekKey}
                             className="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 dark:bg-gray-600 dark:border-gray-600 dark:text-white dark:hover:bg-gray-500"
                           >
                             {isLoading ? '加载中...' : '验证'}
@@ -224,7 +315,7 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
                     type="button"
                     className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
                     onClick={handleConfirm}
-                    disabled={!selectedModel || (provider === 'openai' && !openAIKey)}
+                    disabled={!selectedModel || (provider === 'openai' && !openAIKey) || (provider === 'deepseek' && !deepseekKey)}
                   >
                     确认
                   </button>

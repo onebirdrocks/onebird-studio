@@ -71,7 +71,6 @@ export default function ChatStream() {
     setSelectedModel, 
     availableModels, 
     openAIKey, 
-    updateOpenAIKey,
     isLoadingModels,
     error: modelError 
   } = useModelSelection()
@@ -276,26 +275,21 @@ export default function ChatStream() {
     }
   ];
 
-  const handleNewChat = (provider: string, model: string) => {
-    console.log('Creating new chat with provider:', provider, 'model:', model);
-    
-    // 清空当前对话状态
+  const handleNewChat = (modelInfo: { id: string; name: string; provider: 'ollama' | 'openai' | 'deepseek' }) => {
+    console.log('Creating new chat with model:', modelInfo);
+    initializeChat();
     setStreamingMessage('');
     setInput('');
-    clearMessages();
     
-    // 更新选中的模型
-    const modelInfo = {
-      id: model,
-      name: model.split(':')[0].split('/').pop()?.replace(/^\w/, c => c.toUpperCase()) || model,
-      provider: provider as 'ollama' | 'openai'
+    // 确保 modelInfo 包含所有必要的字段
+    const newModel: Model = {
+      id: modelInfo.id,
+      name: modelInfo.name,
+      provider: modelInfo.provider
     };
     
-    console.log('Setting new model:', modelInfo);
-    setSelectedModel(modelInfo);
-    
-    // 初始化新的聊天
-    initializeChat();
+    console.log('Setting selected model to:', newModel);
+    setSelectedModel(newModel);
     setIsNewChatDialogOpen(false);
   };
 
@@ -393,7 +387,7 @@ export default function ChatStream() {
               <div className="mb-1">当前模型：</div>
               <div className="font-medium">{selectedModel.name}</div>
               <div className="text-xs mt-1">
-                {selectedModel.provider === 'ollama' ? 'Local Ollama' : 'OpenAI'}
+                {selectedModel.provider === 'ollama' ? 'Local Ollama' : selectedModel.provider === 'openai' ? 'OpenAI' : 'DeepSeek'}
               </div>
             </div>
           </div>
@@ -403,7 +397,7 @@ export default function ChatStream() {
         <div className="flex-1 flex flex-col">
           <div className="flex items-center justify-center p-4 border-b dark:border-gray-700">
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              {selectedModel.provider === 'ollama' ? 'Local Ollama' : 'OpenAI'} - {selectedModel.name}
+              {selectedModel.provider === 'ollama' ? 'Local Ollama' : selectedModel.provider === 'openai' ? 'OpenAI' : 'DeepSeek'} - {selectedModel.name}
             </div>
           </div>
 

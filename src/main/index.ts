@@ -39,7 +39,6 @@ function createWindow(): void {
     }
   })
 
-
   // 设置 CSP 策略
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
@@ -47,9 +46,11 @@ function createWindow(): void {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           "default-src 'self';" +
-          "connect-src 'self' http://localhost:11434 https://api.openai.com;" +
+          "connect-src 'self' http://localhost:11434 https://api.openai.com https://api.deepseek.com;" +
           "script-src 'self' 'unsafe-inline' 'unsafe-eval';" +
-          "style-src 'self' 'unsafe-inline';"
+          "style-src 'self' 'unsafe-inline';" +
+          "img-src 'self' data:;" +
+          "font-src 'self' data:;"
         ]
       }
     });
