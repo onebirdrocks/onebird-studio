@@ -1,3 +1,5 @@
+const MODEL_NAME = 'deepseek-r1:latest';
+
 export interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -37,7 +39,7 @@ export interface ChatMessage {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: "deepseek-r1:latest",
+          model: MODEL_NAME,
           messages: messages.map(msg => ({
             role: msg.role,
             content: msg.content
@@ -53,7 +55,7 @@ export interface ChatMessage {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (errorData.error?.includes('model not found')) {
-          throw new Error('模型未找到，请先运行: ollama pull deepseek-r1:latest');
+          throw new Error('模型未找到，请先运行: ollama pull '+MODEL_NAME);
         }
         throw new Error(`服务器响应错误: ${response.status}`);
       }
@@ -93,7 +95,7 @@ export interface ChatMessage {
       }
   
       const tags = await tagsResponse.json();
-      const hasModel = tags.models?.some((model: any) => model.name === 'deepseek-r1:latest');
+      const hasModel = tags.models?.some((model: any) => model.name === MODEL_NAME);
   
       return {
         serviceAvailable: true,
@@ -132,7 +134,7 @@ export interface ChatMessage {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: "deepseek-r1:latest",
+          model: MODEL_NAME,
           messages: messages.map(msg => ({
             role: msg.role,
             content: msg.content
@@ -148,7 +150,7 @@ export interface ChatMessage {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (errorData.error?.includes('model not found')) {
-          throw new Error('模型未找到，请先运行: ollama pull deepseek-r1:latest');
+          throw new Error('模型未找到，请先运行: ollama pull '+MODEL_NAME);
         }
         throw new Error(`服务器响应错误: ${response.status}`);
       }

@@ -9,7 +9,8 @@ interface ChatState {
   isModelAvailable: boolean;
 }
 
-const SYSTEM_PROMPT = `你是一个有用的AI助手。请用简洁、专业的方式回答问题。`;
+const SYSTEM_PROMPT = `你是一个AI个人助理。当用户提出专业问题时，请用简洁、专业的方式回答问题。如果用户和你闲聊，请给与足够的情绪价值与陪伴。`;
+
 
 export function useChatLLMStream() {
   const [state, setState] = useState<ChatState>({
