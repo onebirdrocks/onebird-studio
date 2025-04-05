@@ -1,17 +1,24 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { useApiStore } from './apiStore'
 
 export interface Model {
   id: string
   name: string
   provider: 'ollama' | 'openai' | 'deepseek'
   maxTokens?: number
+  details?: {
+    format?: string
+    family?: string
+    parameterSize?: string
+    quantizationLevel?: string
+  }
 }
 
 interface ModelState {
   // 状态
-  models: Model[]
   selectedModel: Model | null
+  models: Model[]
   apiKeys: {
     openai?: string
     deepseek?: string
@@ -19,8 +26,6 @@ interface ModelState {
   
   // 方法
   setSelectedModel: (model: Model | null) => void
-  addModel: (model: Model) => void
-  removeModel: (modelId: string) => void
   setApiKey: (provider: 'openai' | 'deepseek', key: string) => void
   removeApiKey: (provider: 'openai' | 'deepseek') => void
 }
@@ -28,47 +33,13 @@ interface ModelState {
 export const useModelStore = create<ModelState>()(
   persist(
     (set) => ({
-      // 初始状态
-      models: [
-        {
-          id: 'llama2',
-          name: 'Llama 2',
-          provider: 'ollama',
-        },
-        {
-          id: 'gpt-3.5-turbo',
-          name: 'GPT-3.5 Turbo',
-          provider: 'openai',
-          maxTokens: 4096
-        },
-        {
-          id: 'deepseek-chat',
-          name: 'DeepSeek Chat',
-          provider: 'deepseek',
-          maxTokens: 4096
-        }
-      ],
       selectedModel: null,
+      models: [],
       apiKeys: {},
 
       // 设置选中的模型
       setSelectedModel: (model) => {
         set({ selectedModel: model })
-      },
-
-      // 添加新模型
-      addModel: (model) => {
-        set((state) => ({
-          models: [...state.models, model]
-        }))
-      },
-
-      // 移除模型
-      removeModel: (modelId) => {
-        set((state) => ({
-          models: state.models.filter(m => m.id !== modelId),
-          selectedModel: state.selectedModel?.id === modelId ? null : state.selectedModel
-        }))
       },
 
       // 设置 API 密钥
@@ -84,17 +55,16 @@ export const useModelStore = create<ModelState>()(
       // 移除 API 密钥
       removeApiKey: (provider) => {
         set((state) => {
-          const newApiKeys = { ...state.apiKeys }
-          delete newApiKeys[provider]
-          return { apiKeys: newApiKeys }
+          const { [provider]: _, ...rest } = state.apiKeys;
+          return { apiKeys: rest };
         })
       }
     }),
     {
-      name: 'model-storage',
-      // 只持久化 apiKeys，其他状态不需要持久化
+      name: 'model-store',
       partialize: (state) => ({
-        apiKeys: state.apiKeys
+        apiKeys: state.apiKeys,
+        selectedModel: state.selectedModel
       })
     }
   )

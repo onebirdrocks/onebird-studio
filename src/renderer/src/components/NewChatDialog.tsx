@@ -1,15 +1,17 @@
 import { Fragment, useState, useEffect } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { useModelStore } from '../stores/modelStore';
+import { useApiStore } from '../stores/apiStore';
 import { ChevronLeft } from 'lucide-react';
 import { getOllamaModels } from '../services/ollamaApi';
 import { getOpenAIModels } from '../services/openaiApi';
 import { getDeepSeekModels } from '../services/deepseekApi';
+import type { Model } from '../stores/modelStore';
 
 interface NewChatDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (model: { id: string; name: string; provider: 'ollama' | 'openai' | 'deepseek' }) => void;
+  onConfirm: (model: Model) => void;
 }
 
 type Provider = {
@@ -42,8 +44,9 @@ const PROVIDERS: Provider[] = [
 
 export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDialogProps) {
   const { apiKeys } = useModelStore();
+  const { getProviderConfig } = useApiStore();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [availableModels, setAvailableModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +66,19 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
           models = await getDeepSeekModels();
           break;
       }
-      setAvailableModels(models);
+      
+      // 合并从 API 获取的模型信息和预定义的模型配置
+      const supportedModels = getProviderConfig(provider.id).supportedModels;
+      const mergedModels = models.map(model => {
+        const supportedModel = supportedModels.find(m => m.id === model.id);
+        return {
+          ...model,
+          provider: provider.id,
+          maxTokens: supportedModel?.maxTokens
+        };
+      });
+      
+      setAvailableModels(mergedModels);
     } catch (err) {
       setError('加载模型列表失败');
       console.error('Error loading models:', err);
@@ -87,12 +102,10 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
     setError(null);
   };
 
-  const handleModelSelect = (model: { id: string; name: string }) => {
+  const handleModelSelect = (model: Model) => {
     if (!selectedProvider) return;
-    onConfirm({
-      ...model,
-      provider: selectedProvider.id
-    });
+    onConfirm(model);
+    onClose();
   };
 
   // 当对话框关闭时重置状态

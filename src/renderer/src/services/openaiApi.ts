@@ -1,34 +1,14 @@
 import OpenAI from 'openai';
 import { useModelStore } from '../stores/modelStore';
 import { useApiStore } from '../stores/apiStore';
-
-// OpenAI 支持的模型列表
-const SUPPORTED_MODELS = [
-  {
-    id: 'gpt-4-turbo-preview',
-    name: 'GPT-4 Turbo',
-    maxTokens: 128000,
-    description: '最新的 GPT-4 模型，支持更长的上下文'
-  },
-  {
-    id: 'gpt-4',
-    name: 'GPT-4',
-    maxTokens: 8192,
-    description: '最强大的 GPT-4 模型'
-  },
-  {
-    id: 'gpt-3.5-turbo',
-    name: 'GPT-3.5 Turbo',
-    maxTokens: 4096,
-    description: '强大且经济的模型'
-  }
-];
+import type { Message } from '../types/chat';
+import type { ApiModel, ChatCallbacks } from '../types/api';
 
 /**
  * 获取 OpenAI 可用的模型列表
  * @returns 返回模型列表
  */
-export async function getOpenAIModels() {
+export async function getOpenAIModels(): Promise<ApiModel[]> {
   const { apiKeys } = useModelStore.getState();
   const { getProviderConfig, setApiStatus } = useApiStore.getState();
   const { baseUrl, supportedModels } = getProviderConfig('openai');
@@ -103,21 +83,22 @@ export async function checkOpenAIApiKey(apiKey: string): Promise<boolean> {
 
 /**
  * 与 OpenAI 模型进行对话
- * @param model 模型名称
+ * @param modelId 模型名称
  * @param messages 对话历史
- * @param onMessage 接收消息的回调函数
+ * @param callbacks 回调函数集合
  * @param signal AbortController 的 signal，用于取消请求
  */
 export async function chatWithOpenAI(
-  model: string,
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-  onMessage: (message: string) => void,
+  modelId: string,
+  messages: Message[],
+  callbacks: ChatCallbacks,
   signal?: AbortSignal
-) {
+): Promise<void> {
   const { apiKeys } = useModelStore.getState();
   const { getProviderConfig, setApiStatus } = useApiStore.getState();
   const { baseUrl } = getProviderConfig('openai');
   const openaiApiKey = apiKeys['openai'];
+  const { onToken, onError, onComplete } = callbacks;
 
   if (!openaiApiKey) {
     throw new Error('请先配置 OpenAI API 密钥');
@@ -132,7 +113,7 @@ export async function chatWithOpenAI(
     });
 
     const stream = await openai.chat.completions.create({
-      model,
+      model: modelId,
       messages,
       stream: true,
       temperature: 0.7,
@@ -141,11 +122,12 @@ export async function chatWithOpenAI(
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content;
       if (content) {
-        onMessage(content);
+        onToken(content);
       }
     }
 
     setApiStatus('openai', { isLoading: false });
+    onComplete();
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
@@ -157,12 +139,13 @@ export async function chatWithOpenAI(
         isLoading: false,
         error: `与 OpenAI 模型对话失败: ${error.message}`
       });
-      throw new Error(`与 OpenAI 模型对话失败: ${error.message}`);
+      onError(error);
+    } else {
+      setApiStatus('openai', {
+        isLoading: false,
+        error: '与 OpenAI 模型对话失败'
+      });
+      onError(new Error('与 OpenAI 模型对话失败'));
     }
-    setApiStatus('openai', {
-      isLoading: false,
-      error: '与 OpenAI 模型对话失败'
-    });
-    throw new Error('与 OpenAI 模型对话失败');
   }
 } 

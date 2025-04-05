@@ -3,16 +3,21 @@ import { Sun, Moon, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ChatHistory } from './components/ChatHistory'
 import { ChatStream } from './components/ChatStream'
 import { useModelStore } from './stores/modelStore'
+import NewChatDialog from './components/NewChatDialog'
+import { SettingsPanel } from './components/SettingsPanel'
 
 function App(): JSX.Element {
   const [isDark, setIsDark] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false)
   const {
     apiKeys,
     setApiKey,
-    removeApiKey
+    removeApiKey,
+    selectedModel,
+    setSelectedModel
   } = useModelStore()
 
   const [openaiKey, setOpenaiKey] = useState(apiKeys.openai || '')
@@ -80,8 +85,14 @@ function App(): JSX.Element {
 
       {/* 中间聊天历史栏 */}
       <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 border-r border-gray-200 dark:border-gray-700 flex flex-col relative`}>
-        <div className={`${isSidebarOpen ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}>
-          <ChatHistory />
+        <div className={`${isSidebarOpen ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300 h-full flex flex-col`}>
+          <div className="flex-1 overflow-hidden">
+            <ChatHistory />
+          </div>
+          {/* 设置面板 - 固定在底部 */}
+          <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <SettingsPanel />
+          </div>
         </div>
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -93,8 +104,29 @@ function App(): JSX.Element {
 
       {/* 右侧聊天区域 */}
       <div className="flex-1">
-        <ChatStream />
+        {selectedModel ? (
+          <ChatStream />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <button
+              onClick={() => setIsNewChatOpen(true)}
+              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              选择模型开始聊天
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* 新建聊天对话框 */}
+      <NewChatDialog
+        isOpen={isNewChatOpen}
+        onClose={() => setIsNewChatOpen(false)}
+        onConfirm={(model) => {
+          setSelectedModel(model)
+          setIsNewChatOpen(false)
+        }}
+      />
 
       {/* API 密钥设置对话框 */}
       {isSettingsOpen && (

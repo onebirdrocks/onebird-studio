@@ -3,22 +3,23 @@ import { Plus } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { useModelStore } from '../stores/modelStore';
 import NewChatDialog from './NewChatDialog';
+import type { Model } from '../stores/modelStore';
 
 export function ChatHistory() {
   const {
-    histories,
-    currentChatId,
+    sortedHistories: histories,
+    session: { currentChatId },
     setCurrentChatId,
     deleteChat,
-    createNewChat
+    createChat
   } = useChatStore();
 
   const { setSelectedModel } = useModelStore();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const handleConfirm = async (model) => {
+  const handleConfirm = async (model: Model) => {
     setSelectedModel(model);
-    await createNewChat(model);
+    await createChat(model);
     setIsDialogOpen(false);
   };
 
@@ -36,9 +37,9 @@ export function ChatHistory() {
       </div>
 
       {/* 聊天历史列表 */}
-      <div className="flex-1 overflow-auto p-4">
-        <div className="space-y-2">
-          {histories.map(chat => (
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-2">
+          {histories?.map(chat => (
             <div
               key={chat.id}
               className={`p-3 rounded cursor-pointer flex justify-between items-center transition-colors ${

@@ -1,4 +1,6 @@
 import axios from 'axios';
+import type { Message } from '../types/chat';
+import type { ApiModel, ChatCallbacks } from '../types/api';
 import { useModelStore } from '../stores/modelStore';
 import { useApiStore } from '../stores/apiStore';
 
@@ -80,19 +82,20 @@ export async function checkDeepSeekApiKey(apiKey: string): Promise<boolean> {
  * 与 DeepSeek 模型进行对话
  * @param model 模型名称
  * @param messages 对话历史
- * @param onMessage 接收消息的回调函数
+ * @param callbacks 回调函数集合
  * @param signal AbortController 的 signal，用于取消请求
  */
 export async function chatWithDeepSeek(
   model: string,
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-  onMessage: (message: string) => void,
+  messages: Message[],
+  callbacks: ChatCallbacks,
   signal?: AbortSignal
-) {
+): Promise<void> {
   const { apiKeys } = useModelStore.getState();
   const { getProviderConfig, setApiStatus } = useApiStore.getState();
   const { baseUrl } = getProviderConfig('deepseek');
   const deepseekApiKey = apiKeys['deepseek'];
+  const { onToken, onError, onComplete } = callbacks;
 
   if (!deepseekApiKey) {
     throw new Error('请先配置 DeepSeek API 密钥');
@@ -139,21 +142,26 @@ export async function chatWithDeepSeek(
         if (!line || !line.startsWith('data: ')) continue;
         const data = line.slice(6);
         
-        if (data === '[DONE]') break;
+        if (data === '[DONE]') {
+          onComplete();
+          break;
+        }
 
         try {
           const parsed = JSON.parse(data);
           const content = parsed.choices[0]?.delta?.content;
           if (content) {
-            onMessage(content);
+            onToken(content);
           }
         } catch (e) {
           console.error('Failed to parse DeepSeek response:', e);
+          continue;
         }
       }
     }
 
     setApiStatus('deepseek', { isLoading: false });
+    onComplete();
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
@@ -165,12 +173,13 @@ export async function chatWithDeepSeek(
         isLoading: false,
         error: `与 DeepSeek 模型对话失败: ${error.message}`
       });
-      throw new Error(`与 DeepSeek 模型对话失败: ${error.message}`);
+      onError(error);
+    } else {
+      setApiStatus('deepseek', {
+        isLoading: false,
+        error: '与 DeepSeek 模型对话失败'
+      });
+      onError(new Error('与 DeepSeek 模型对话失败'));
     }
-    setApiStatus('deepseek', {
-      isLoading: false,
-      error: '与 DeepSeek 模型对话失败'
-    });
-    throw new Error('与 DeepSeek 模型对话失败');
   }
 } 
