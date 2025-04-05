@@ -3,6 +3,7 @@ import type { Model } from '../stores/modelStore';
 export interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  isThinking?: boolean;
 }
 
 export interface ChatHistory {

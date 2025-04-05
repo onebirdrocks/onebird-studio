@@ -45,44 +45,65 @@ export function MessageItem({ message }: MessageItemProps) {
   // 处理消息内容，将 think 标签的内容用特殊样式显示
   const renderContent = (content: string) => {
     const decodedContent = decodeHtml(content);
-    const parts = decodedContent.split(/(<think>|<\/think>)/);
-    const result: JSX.Element[] = [];
-    
-    let isInThinkBlock = false;
-    let currentThinkContent = '';
-    
     const themeClasses = getThemeClasses();
     
-    parts.forEach((part, index) => {
-      if (part === '<think>') {
-        isInThinkBlock = true;
-      } else if (part === '</think>') {
-        if (currentThinkContent) {
-          result.push(
-            <div key={`think-${index}`} 
-              className={`my-4 p-4 ${themeClasses.bg} rounded-xl border-l-4 ${themeClasses.border} shadow-sm`}
-            >
-              <div className={`flex items-center gap-2 ${themeClasses.text} text-sm font-medium mb-2.5`}>
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-                思考过程
-              </div>
-              <div className="text-slate-700 dark:text-slate-200 leading-relaxed">{currentThinkContent}</div>
-            </div>
-          );
-        }
-        isInThinkBlock = false;
-        currentThinkContent = '';
-      } else if (isInThinkBlock) {
-        currentThinkContent += part;
-      } else if (part) {
-        result.push(<span key={`text-${index}`}>{part}</span>);
-      }
-    });
+    // 如果正在思考中，使用特殊样式
+    if (message.isThinking) {
+      return (
+        <>
+          {decodedContent.split(/(<think>|<\/think>)/).map((part, index) => {
+            if (part === '<think>' || part === '</think>') {
+              return null;
+            }
+            if (part) {
+              return (
+                <div key={`think-${index}`} 
+                  className={`my-4 p-4 ${themeClasses.bg} rounded-xl border-l-4 ${themeClasses.border} shadow-sm`}
+                >
+                  <div className={`flex items-center gap-2 ${themeClasses.text} text-sm font-medium mb-2.5`}>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                    思考过程
+                  </div>
+                  <div className="text-slate-700 dark:text-slate-200 leading-relaxed">{part}</div>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </>
+      );
+    }
     
-    return result;
+    // 使用正则表达式匹配 think 标签及其内容
+    const parts = decodedContent.split(/(<think>.*?<\/think>)/gs);
+    
+    return parts.map((part, index) => {
+      if (part.startsWith('<think>') && part.endsWith('</think>')) {
+        // 提取 think 标签中的内容
+        const thinkContent = part.slice(7, -8); // 移除 <think> 和 </think>
+        
+        return (
+          <div key={`think-${index}`} 
+            className={`my-4 p-4 ${themeClasses.bg} rounded-xl border-l-4 ${themeClasses.border} shadow-sm`}
+          >
+            <div className={`flex items-center gap-2 ${themeClasses.text} text-sm font-medium mb-2.5`}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+              思考过程
+            </div>
+            <div className="text-slate-700 dark:text-slate-200 leading-relaxed">{thinkContent}</div>
+          </div>
+        );
+      }
+      
+      // 返回普通文本内容
+      return part ? <span key={`text-${index}`}>{part}</span> : null;
+    });
   };
 
   return (
