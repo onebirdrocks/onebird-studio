@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Message, sendMessageToOllamaStream, checkOllamaStatus } from '../services/ollamaApi';
+import { Message } from '../types/chat';
+import { chatWithOllama, checkOllamaAvailable } from '../services/ollamaApi';
 
 interface ChatState {
   messages: Message[];
@@ -9,13 +10,13 @@ interface ChatState {
   isModelAvailable: boolean;
 }
 
-const SYSTEM_PROMPT = `你是一个有用的AI助手。请用简洁、专业的方式回答问题。`;
+const SYSTEM_PROMPT = `你是一个有用的 AI 助手。`;
 
 export function useChatLLM() {
   const [state, setState] = useState<ChatState>({
     messages: [
       {
-        role: 'system' as const,
+        role: 'system',
         content: SYSTEM_PROMPT
       }
     ],
@@ -27,12 +28,11 @@ export function useChatLLM() {
 
   const checkStatus = useCallback(async () => {
     try {
-      const status = await checkOllamaStatus();
+      const isAvailable = await checkOllamaAvailable();
       setState(prev => ({
         ...prev,
-        isServiceAvailable: status.isServiceAvailable,
-        isModelAvailable: status.isModelAvailable,
-        error: null
+        isServiceAvailable: isAvailable,
+        isModelAvailable: true // 这里可以添加检查特定模型是否可用的逻辑
       }));
     } catch (error) {
       setState(prev => ({
@@ -46,8 +46,6 @@ export function useChatLLM() {
 
   useEffect(() => {
     checkStatus();
-    const interval = setInterval(checkStatus, 5000);
-    return () => clearInterval(interval);
   }, [checkStatus]);
 
   const sendMessage = useCallback(async (userMessage: string) => {
@@ -82,29 +80,39 @@ export function useChatLLM() {
       }));
 
       let accumulatedResponse = '';
-      await sendMessageToOllamaStream(
-        newMessages,
+      await chatWithOllama(
         'deepseek-r1:latest',
-        (token) => {
-          accumulatedResponse += token;
-          setState(prev => {
-            const messages = [...prev.messages];
-            messages[messages.length - 1] = {
-              role: 'assistant' as const,
-              content: accumulatedResponse
-            };
-            return {
+        newMessages,
+        {
+          onToken: (token) => {
+            accumulatedResponse += token;
+            setState(prev => {
+              const messages = [...prev.messages];
+              messages[messages.length - 1] = {
+                role: 'assistant' as const,
+                content: accumulatedResponse
+              };
+              return {
+                ...prev,
+                messages
+              };
+            });
+          },
+          onError: (error) => {
+            setState(prev => ({
               ...prev,
-              messages
-            };
-          });
+              error: error.message,
+              isLoading: false
+            }));
+          },
+          onComplete: () => {
+            setState(prev => ({
+              ...prev,
+              isLoading: false
+            }));
+          }
         }
       );
-      
-      setState(prev => ({
-        ...prev,
-        isLoading: false
-      }));
     } catch (error) {
       setState(prev => ({
         ...prev,

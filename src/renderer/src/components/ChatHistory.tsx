@@ -5,7 +5,12 @@ import { useModelStore } from '../stores/modelStore';
 import NewChatDialog from './NewChatDialog';
 import type { Model } from '../stores/modelStore';
 
-export function ChatHistory() {
+interface ChatHistoryProps {
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
+}
+
+export function ChatHistory({ sidebarOpen = true, onToggleSidebar }: ChatHistoryProps) {
   const {
     sortedHistories: histories,
     session: { currentChatId },
