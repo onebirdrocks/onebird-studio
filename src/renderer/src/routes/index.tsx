@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
-import MainLayout from '../layouts/MainLayout'
-import Chat from '../Chat'
-import Settings from '../pages/Settings'
+import MainLayout from '@renderer/layouts/MainLayout'
+import Chat from '@renderer/Chat'
+import Settings from '@renderer/pages/Settings'
 
 export const router = createBrowserRouter([
   {

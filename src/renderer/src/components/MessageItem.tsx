@@ -2,19 +2,34 @@ import { FC } from 'react'
 import { Message } from '../types/chat'
 import { ThinkingIcon } from './icons/ThinkingIcon'
 import { useSettingStore } from '../stores/settingStore'
+import { cn } from '../lib/utils'
 
 interface MessageItemProps {
   message: Message
 }
 
 export const MessageItem: FC<MessageItemProps> = ({ message }) => {
-  const { themeColor } = useSettingStore()
+  const { themeColor, fontSize, fontFamily } = useSettingStore()
 
   // 解码转义的 HTML 实体
   const decodeHtml = (html: string) => {
     const txt = document.createElement('textarea')
     txt.innerHTML = html
     return txt.value
+  }
+
+  // 获取字体相关的样式类
+  const getFontFamilyClass = () => {
+    switch (fontFamily) {
+      case 'inter':
+        return 'font-inter'
+      case 'roboto':
+        return 'font-roboto'
+      case 'sourceHanSans':
+        return 'font-source-han-sans'
+      default:
+        return 'font-sans'
+    }
   }
 
   // 获取主题相关的样式类
@@ -68,7 +83,13 @@ export const MessageItem: FC<MessageItemProps> = ({ message }) => {
               <ThinkingIcon className="w-4 h-4" />
               思考过程
             </div>
-            <div className="text-slate-700 dark:text-slate-200 leading-relaxed">
+            <div 
+              className={cn(
+                "text-slate-700 dark:text-slate-200 leading-relaxed",
+                getFontFamilyClass()
+              )}
+              style={{ fontSize: `${fontSize}px` }}
+            >
               {part}
             </div>
           </div>
@@ -76,12 +97,30 @@ export const MessageItem: FC<MessageItemProps> = ({ message }) => {
       }
       
       // 普通文本内容
-      return part ? <div key={index}>{part}</div> : null
+      return part ? (
+        <div 
+          key={index} 
+          className={cn(
+            "text-slate-700 dark:text-slate-200 leading-relaxed",
+            getFontFamilyClass()
+          )}
+          style={{ fontSize: `${fontSize}px` }}
+        >
+          {part}
+        </div>
+      ) : null
     })
   }
 
   return (
-    <div className={`p-4 ${message.role === 'assistant' ? 'bg-gray-50 dark:bg-slate-800' : ''}`}>
+    <div 
+      className={cn(
+        "p-4",
+        message.role === 'assistant' ? 'bg-gray-50 dark:bg-slate-800' : '',
+        getFontFamilyClass()
+      )}
+      style={{ fontSize: `${fontSize}px` }}
+    >
       <div className="flex items-start gap-4">
         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">
           {message.role === 'assistant' ? 'A' : 'U'}

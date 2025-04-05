@@ -18,6 +18,11 @@ type ChatStore = ChatState & ChatComputedState & ChatAction
 export const useChatStore = create<ChatStore>()(
   persist(
     (set, get) => {
+      // 计算 sortedHistories 的辅助函数
+      const computeSortedHistories = (items: Record<string, ChatHistory>, order: string[]) => {
+        return order.map(id => items[id]).sort((a, b) => b.updatedAt - a.updatedAt)
+      }
+
       return {
         // 初始状态
         session: {
@@ -39,6 +44,27 @@ export const useChatStore = create<ChatStore>()(
         currentMessages: [],
         sortedHistories: [],
 
+        // 初始化 store
+        initializeStore: () => {
+          const state = get()
+          const sortedHistories = computeSortedHistories(state.history.items, state.history.order)
+          
+          if (sortedHistories.length > 0 && !state.session.currentChatId) {
+            const latestChat = sortedHistories[0]
+            set({
+              session: {
+                ...state.session,
+                currentChatId: latestChat.id
+              },
+              currentChat: latestChat,
+              currentMessages: latestChat.messages,
+              sortedHistories
+            })
+          } else {
+            set({ sortedHistories })
+          }
+        },
+
         // 设置当前聊天 ID
         setCurrentChatId: (chatId) => {
           set(state => ({
@@ -48,7 +74,8 @@ export const useChatStore = create<ChatStore>()(
             },
             // 更新计算属性
             currentChat: chatId ? state.history.items[chatId] : null,
-            currentMessages: chatId ? state.history.items[chatId]?.messages || [] : []
+            currentMessages: chatId ? state.history.items[chatId]?.messages || [] : [],
+            sortedHistories: computeSortedHistories(state.history.items, state.history.order)
           }))
         },
 
@@ -336,7 +363,13 @@ export const useChatStore = create<ChatStore>()(
         session: {
           currentChatId: state.session.currentChatId
         }
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        // 在恢复存储后立即初始化
+        if (state) {
+          state.initializeStore()
+        }
+      }
     }
   )
 ) 

@@ -8,6 +8,12 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      fontFamily: {
+        'sans': ['-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        'inter': ['Inter', 'sans-serif'],
+        'roboto': ['Roboto', 'sans-serif'],
+        'source-han-sans': ['"Source Han Sans"', '"Source Han Sans SC"', '"Source Han Sans CN"', 'sans-serif']
+      },
       fontSize: {
         'xs': '0.75rem',     // 12px
         'sm': '0.875rem',    // 14px

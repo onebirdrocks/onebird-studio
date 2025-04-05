@@ -1,19 +1,35 @@
 import React, { useRef, useEffect } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useModelStore } from '../stores/modelStore';
+import { useSettingStore } from '../stores/settingStore';
 import { Message } from '../types/chat';
 import { MessageItem } from './MessageItem';
+import { cn } from '../lib/utils';
 
 export function ChatStream() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { currentMessages: messages, session: { isLoading, error }, sendMessage } = useChatStore();
   const { selectedModel } = useModelStore();
+  const { fontSize, fontFamily } = useSettingStore();
 
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  const getFontFamilyClass = () => {
+    switch (fontFamily) {
+      case 'inter':
+        return 'font-inter'
+      case 'roboto':
+        return 'font-roboto'
+      case 'sourceHanSans':
+        return 'font-source-han-sans'
+      default:
+        return 'font-sans'
+    }
+  }
 
   const handleSendMessage = async (content: string) => {
     if (!selectedModel) {
@@ -39,7 +55,13 @@ export function ChatStream() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div 
+        className={cn(
+          "flex-1 overflow-y-auto p-4 space-y-4",
+          getFontFamilyClass()
+        )}
+        style={{ fontSize: `${fontSize}px` }}
+      >
         {messages?.map((message: Message, index: number) => (
           <MessageItem key={index} message={message} />
         ))}
@@ -68,13 +90,21 @@ export function ChatStream() {
             type="text"
             name="message"
             placeholder="输入消息..."
-            className="flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className={cn(
+              "flex-1 p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white",
+              getFontFamilyClass()
+            )}
+            style={{ fontSize: `${fontSize}px` }}
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={isLoading}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+            className={cn(
+              "px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50",
+              getFontFamilyClass()
+            )}
+            style={{ fontSize: `${fontSize}px` }}
           >
             {isLoading ? '发送中...' : '发送'}
           </button>

@@ -59,4 +59,5 @@ export type ChatAction = {
   sendMessage: (content: string, model: Model) => Promise<void>;
   clearMessages: () => void;
   generateChatTitle: (chatId: string, firstMessage: string) => Promise<void>;
+  initializeStore: () => void;
 } 
