@@ -1,22 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, FC } from 'react';
 import { Plus } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { useModelStore } from '../stores/modelStore';
 import NewChatDialog from './NewChatDialog';
 import type { Model } from '../stores/modelStore';
+import { cn } from '../lib/utils';
 
 interface ChatHistoryProps {
-  sidebarOpen?: boolean;
-  onToggleSidebar?: () => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
-export function ChatHistory({ sidebarOpen = true, onToggleSidebar }: ChatHistoryProps) {
+export const ChatHistory: FC<ChatHistoryProps> = ({ sidebarOpen, onToggleSidebar }) => {
   const {
     sortedHistories: histories,
     session: { currentChatId },
     setCurrentChatId,
-    deleteChat,
-    createChat
+    createChat,
+    deleteChat
   } = useChatStore();
 
   const { setSelectedModel } = useModelStore();
@@ -29,63 +30,90 @@ export function ChatHistory({ sidebarOpen = true, onToggleSidebar }: ChatHistory
   };
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
-      {/* 新建聊天按钮 */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => setIsDialogOpen(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 dark:hover:bg-blue-700"
+    <div className="relative h-full">
+      {/* 切换按钮 */}
+      <button
+        onClick={onToggleSidebar}
+        className={cn(
+          'absolute -right-4 top-1/2 -translate-y-1/2 z-10',
+          'w-8 h-8 flex items-center justify-center',
+          'bg-gray-100 dark:bg-slate-800',
+          'border border-gray-200 dark:border-slate-700',
+          'rounded-full shadow-sm',
+          'text-gray-500 dark:text-gray-400',
+          'hover:text-gray-700 dark:hover:text-gray-300',
+          'transition-colors'
+        )}
+      >
+        <svg
+          className={cn(
+            'w-4 h-4 transition-transform',
+            sidebarOpen ? 'rotate-0' : 'rotate-180'
+          )}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         >
-          <Plus size={20} />
-          <span>新建聊天</span>
-        </button>
-      </div>
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
 
-      {/* 聊天历史列表 */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-4 space-y-2">
-          {histories?.map(chat => (
-            <div
-              key={chat.id}
-              className={`p-3 rounded cursor-pointer flex justify-between items-center transition-colors ${
-                chat.id === currentChatId 
-                  ? 'bg-blue-100 dark:bg-blue-900/50' 
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-              onClick={() => {
-                setCurrentChatId(chat.id);
-                setSelectedModel(chat.model);
-              }}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate dark:text-white">
-                  {chat.title}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                  <span>{new Date(chat.updatedAt).toLocaleDateString()}</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
-                  <span className="truncate">{chat.model.name}</span>
-                </div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteChat(chat.id);
-                }}
-                className="ml-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+      {/* 聊天历史内容 */}
+      <div className={cn(
+        'h-full overflow-hidden transition-all duration-300',
+        sidebarOpen ? 'opacity-100' : 'opacity-0'
+      )}>
+        {/* 新建聊天按钮 */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => setIsDialogOpen(true)}
+            className={cn(
+              'w-full px-4 py-2 rounded-lg',
+              'bg-blue-500 hover:bg-blue-600',
+              'text-white font-medium',
+              'flex items-center justify-center gap-2',
+              'transition-colors'
+            )}
+          >
+            <Plus className="w-5 h-5" />
+            新建聊天
+          </button>
         </div>
-      </div>
 
-      <NewChatDialog
-        isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        onConfirm={handleConfirm}
-      />
+        {/* 聊天历史列表 */}
+        <div className="overflow-y-auto h-[calc(100%-5rem)]">
+          <div className="space-y-1 p-2">
+            {histories.map((history) => (
+              <button
+                key={history.id}
+                onClick={() => {
+                  setCurrentChatId(history.id);
+                  setSelectedModel(history.model);
+                }}
+                className={cn(
+                  'w-full px-3 py-2 rounded-lg text-left',
+                  'transition-colors truncate',
+                  currentChatId === history.id
+                    ? 'bg-gray-200 dark:bg-slate-700 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800'
+                )}
+              >
+                {history.title || '新对话'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 新建聊天对话框 */}
+        <NewChatDialog
+          isOpen={isDialogOpen}
+          onClose={() => setIsDialogOpen(false)}
+          onConfirm={handleConfirm}
+        />
+      </div>
     </div>
   );
 } 
