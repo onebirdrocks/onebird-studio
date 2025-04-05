@@ -55,8 +55,8 @@ export const useModelStore = create<ModelState>()(
       // 移除 API 密钥
       removeApiKey: (provider) => {
         set((state) => {
-          const { [provider]: _, ...rest } = state.apiKeys;
-          return { apiKeys: rest };
+          const { [provider]: _, ...rest } = state.apiKeys
+          return { apiKeys: rest }
         })
       }
     }),

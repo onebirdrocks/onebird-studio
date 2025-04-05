@@ -18,6 +18,14 @@ type ChatStore = ChatState & ChatComputedState & ChatAction
 export const useChatStore = create<ChatStore>()(
   persist(
     (set, get) => {
+      // 为每个聊天维护独立的 AbortController
+      const abortControllers: Record<string, AbortController> = {};
+
+      // 计算 sortedHistories 的辅助函数
+      const computeSortedHistories = (items: Record<string, ChatHistory>, order: string[]) => {
+        return order.map(id => items[id]).sort((a, b) => b.updatedAt - a.updatedAt)
+      }
+
       return {
         // 初始状态
         session: {
@@ -39,16 +47,40 @@ export const useChatStore = create<ChatStore>()(
         currentMessages: [],
         sortedHistories: [],
 
+        // 初始化 store
+        initializeStore: () => {
+          const state = get()
+          const sortedHistories = computeSortedHistories(state.history.items, state.history.order)
+          
+          if (sortedHistories.length > 0 && !state.session.currentChatId) {
+            const latestChat = sortedHistories[0]
+            set({
+              session: {
+                ...state.session,
+                currentChatId: latestChat.id
+              },
+              currentChat: latestChat,
+              currentMessages: latestChat.messages,
+              sortedHistories
+            })
+          } else {
+            set({ sortedHistories })
+          }
+        },
+
         // 设置当前聊天 ID
         setCurrentChatId: (chatId) => {
+          // 不再在切换聊天时取消请求
           set(state => ({
             session: {
               ...state.session,
-              currentChatId: chatId
+              currentChatId: chatId,
+              isLoading: false,
+              error: null
             },
-            // 更新计算属性
             currentChat: chatId ? state.history.items[chatId] : null,
-            currentMessages: chatId ? state.history.items[chatId]?.messages || [] : []
+            currentMessages: chatId ? state.history.items[chatId]?.messages || [] : [],
+            sortedHistories: computeSortedHistories(state.history.items, state.history.order)
           }))
         },
 
@@ -92,6 +124,12 @@ export const useChatStore = create<ChatStore>()(
 
         // 删除聊天
         deleteChat: (chatId) => {
+          // 如果删除的聊天有正在进行的请求，取消它
+          if (abortControllers[chatId]) {
+            abortControllers[chatId].abort()
+            delete abortControllers[chatId]
+          }
+
           set(state => {
             const { [chatId]: deletedChat, ...remainingItems } = state.history.items
             const newOrder = state.history.order.filter(id => id !== chatId)
@@ -106,7 +144,6 @@ export const useChatStore = create<ChatStore>()(
                 ...state.session,
                 currentChatId: newCurrentChatId
               },
-              // 更新计算属性
               currentChat: newCurrentChatId ? remainingItems[newCurrentChatId] : null,
               currentMessages: newCurrentChatId ? remainingItems[newCurrentChatId]?.messages || [] : [],
               sortedHistories: newOrder.map(id => remainingItems[id])
@@ -153,14 +190,17 @@ export const useChatStore = create<ChatStore>()(
             }
 
             const newItems = { ...state.history.items, [chatId]: updatedChat }
+            
+            // 只有当前选中的聊天是被更新的聊天时，才更新 currentMessages
+            const shouldUpdateCurrentMessages = state.session.currentChatId === chatId
+            
             return {
               history: {
                 ...state.history,
                 items: newItems
               },
-              // 更新计算属性
-              currentChat: state.session.currentChatId === chatId ? updatedChat : state.currentChat,
-              currentMessages: state.session.currentChatId === chatId ? messages : state.currentMessages,
+              currentChat: shouldUpdateCurrentMessages ? updatedChat : state.currentChat,
+              currentMessages: shouldUpdateCurrentMessages ? messages : state.currentMessages,
               sortedHistories: state.history.order.map(id => newItems[id])
             }
           })
@@ -171,105 +211,104 @@ export const useChatStore = create<ChatStore>()(
           const state = get()
           let chatId = state.session.currentChatId
           
-          // 如果没有当前聊天，创建一个新的
           if (!chatId) {
             chatId = get().createChat(model)
           }
 
-          // 设置加载状态
+          // 如果这个聊天已经有正在进行的请求，就取消它
+          if (abortControllers[chatId]) {
+            abortControllers[chatId].abort()
+          }
+          
+          // 为这个聊天创建新的 AbortController
+          abortControllers[chatId] = new AbortController()
+
           set(state => ({
             session: { ...state.session, isLoading: true, error: null }
           }))
 
           try {
-            // 添加用户消息
             const newMessage: Message = {
               role: 'user',
               content
             }
-            const currentMessages = [...get().currentMessages, newMessage]
-            get().updateChatMessages(chatId, currentMessages)
+            
+            // 获取这个特定聊天的消息
+            const chatMessages = [...(state.history.items[chatId]?.messages || []), newMessage]
+            get().updateChatMessages(chatId, chatMessages)
 
-            // 根据模型提供商选择对应的聊天服务
             const chatService = {
               ollama: chatWithOllama,
               openai: chatWithOpenAI,
               deepseek: chatWithDeepSeek
             }[model.provider]
 
-            // 准备回调函数
-            const callbacks = {
-              onToken: (token: string) => {
-                const messages = get().currentMessages
-                const lastMessage = messages[messages.length - 1]
-                
-                // 转义非 think 标签的内容
-                const escapedToken = token.replace(/[&<>"']/g, char => {
-                  const entities: Record<string, string> = {
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;',
-                    "'": '&#039;'
+            // 使用这个聊天的 AbortController
+            await chatService(
+              model.id,
+              chatMessages,
+              {
+                onToken: (token) => {
+                  // 获取最新的状态
+                  const currentState = get()
+                  // 获取这个特定聊天的消息
+                  const messages = [...(currentState.history.items[chatId]?.messages || [])]
+                  const lastMessage = messages[messages.length - 1]
+                  
+                  let updatedMessages: Message[]
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    // 更新最后一条消息
+                    lastMessage.content += token
+                    updatedMessages = messages
+                  } else {
+                    // 添加新的助手消息
+                    updatedMessages = [
+                      ...messages,
+                      {
+                        role: 'assistant',
+                        content: token
+                      }
+                    ]
                   }
-                  return entities[char] || char
-                })
+                  
+                  // 直接更新这个聊天的消息
+                  get().updateChatMessages(chatId, updatedMessages)
+                },
+                onError: (error) => {
+                  // 只更新全局加载状态
+                  set(state => ({
+                    session: {
+                      ...state.session,
+                      error: error.message,
+                      isLoading: false
+                    }
+                  }))
+                },
+                onComplete: () => {
+                  // 请求完成后删除这个聊天的 AbortController
+                  delete abortControllers[chatId]
+                  // 只更新全局加载状态
+                  set(state => ({
+                    session: { ...state.session, isLoading: false }
+                  }))
 
-                if (!lastMessage || lastMessage.role === 'user') {
-                  // 创建新的助手消息
-                  const newAssistantMessage: Message = {
-                    role: 'assistant',
-                    content: escapedToken,
-                    isThinking: token === '<think>'  // 添加思考状态标记
+                  // 如果是新聊天且标题是临时的，生成新的标题
+                  const chat = get().history.items[chatId]
+                  if (chat?.isTemporaryTitle) {
+                    get().generateChatTitle(chatId, content)
                   }
-                  get().updateChatMessages(chatId!, [...messages, newAssistantMessage])
-                } else {
-                  // 更新现有的助手消息
-                  if (token === '<think>') {
-                    lastMessage.isThinking = true
-                  } else if (token === '</think>') {
-                    lastMessage.isThinking = false
-                  }
-                  lastMessage.content += escapedToken
-                  get().updateChatMessages(chatId!, [...messages])
                 }
               },
-              onError: (error: Error) => {
-                console.error('Chat error:', error)
-                set(state => ({
-                  session: {
-                    ...state.session,
-                    isLoading: false,
-                    error: error.message
-                  }
-                }))
-              },
-              onComplete: () => {
-                set(state => ({
-                  session: {
-                    ...state.session,
-                    isLoading: false,
-                    error: null
-                  }
-                }))
-
-                // 如果标题是临时的，生成新的标题
-                const chat = get().currentChat
-                if (chat?.isTemporaryTitle) {
-                  get().generateChatTitle(chatId!, content)
-                }
-              }
-            }
-
-            // 发送消息
-            await chatService(model.id, currentMessages, callbacks)
+              abortControllers[chatId].signal
+            )
           } catch (error) {
-            console.error('Failed to send message:', error)
+            // 发生错误时也要删除这个聊天的 AbortController
+            delete abortControllers[chatId]
             set(state => ({
               session: {
                 ...state.session,
-                isLoading: false,
-                error: error instanceof Error ? error.message : '发送消息失败'
+                error: error instanceof Error ? error.message : '发送消息失败',
+                isLoading: false
               }
             }))
           }
@@ -294,24 +333,44 @@ export const useChatStore = create<ChatStore>()(
             
             const titleMessage = {
               role: 'user' as const,
-              content: `请为以下对话生成一个简短的标题（不超过20个字）：${filteredMessage}`
+              content: `请为以下对话生成一个简短的标题（不超过20个字，直接返回标题文本即可，不要加任何其他内容）：${filteredMessage}`
             }
 
             let title = ''
+            const titleAbortController = new AbortController()
+
             const callbacks = {
               onToken: (token: string) => {
-                title += token
+                // 移除可能的引号和换行
+                const cleanToken = token.replace(/["""'\n]/g, '').trim()
+                if (cleanToken) {
+                  title += cleanToken
+                }
               },
               onError: (error: Error) => {
                 console.error('生成标题失败:', error)
                 get().updateChatTitle(chatId, '新对话')
               },
               onComplete: () => {
-                title = title
-                  .replace(/["""]/g, '')
+                // 清理标题文本
+                const cleanTitle = title
+                  .replace(/["""'\n]/g, '')
                   .replace(/<think>[\s\S]*?<\/think>/g, '')
+                  .replace(/^["']|["']$/g, '') // 移除开头和结尾的引号
                   .trim()
-                get().updateChatTitle(chatId, title)
+                
+                // 如果生成的标题为空，使用默认标题
+                if (!cleanTitle) {
+                  get().updateChatTitle(chatId, '新对话')
+                  return
+                }
+
+                // 限制标题长度
+                const finalTitle = cleanTitle.length > 20 
+                  ? cleanTitle.slice(0, 20) + '...'
+                  : cleanTitle
+
+                get().updateChatTitle(chatId, finalTitle)
               }
             }
 
@@ -321,7 +380,12 @@ export const useChatStore = create<ChatStore>()(
               deepseek: chatWithDeepSeek
             }[chat.model.provider]
 
-            await chatService(chat.model.id, [titleMessage], callbacks)
+            await chatService(
+              chat.model.id, 
+              [titleMessage], 
+              callbacks,
+              titleAbortController.signal
+            )
           } catch (error) {
             console.error('生成标题失败:', error)
             get().updateChatTitle(chatId, '新对话')
@@ -336,7 +400,13 @@ export const useChatStore = create<ChatStore>()(
         session: {
           currentChatId: state.session.currentChatId
         }
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        // 在恢复存储后立即初始化
+        if (state) {
+          state.initializeStore()
+        }
+      }
     }
   )
 ) 

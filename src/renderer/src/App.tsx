@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sun, Moon, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ChatHistory } from './components/ChatHistory'
 import { ChatStream } from './components/ChatStream'
 import { useModelStore } from './stores/modelStore'
+import { useSettingStore } from './stores/settingStore'
+import { useChatStore } from './stores/chatStore'
+import { cn } from './lib/utils'
 import NewChatDialog from './components/NewChatDialog'
 import { SettingsPanel } from './components/SettingsPanel'
 
@@ -12,6 +15,7 @@ function App(): JSX.Element {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isNewChatOpen, setIsNewChatOpen] = useState(false)
+  const { fontSize, fontFamily } = useSettingStore()
   const {
     apiKeys,
     setApiKey,
@@ -19,9 +23,47 @@ function App(): JSX.Element {
     selectedModel,
     setSelectedModel
   } = useModelStore()
+  const {
+    sortedHistories,
+    session: { currentChatId },
+    setCurrentChatId,
+    initializeStore
+  } = useChatStore()
 
   const [openaiKey, setOpenaiKey] = useState(apiKeys.openai || '')
   const [deepseekKey, setDeepseekKey] = useState(apiKeys.deepseek || '')
+
+  // 初始化聊天历史
+  useEffect(() => {
+    initializeStore()
+  }, [])
+
+  // 当选择模型变化时，确保聊天历史被加载
+  useEffect(() => {
+    if (selectedModel && sortedHistories.length > 0 && !currentChatId) {
+      const latestChat = sortedHistories[0]
+      setCurrentChatId(latestChat.id)
+      setSelectedModel(latestChat.model)
+    }
+  }, [selectedModel, sortedHistories, currentChatId])
+
+  // 应用字体设置
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${fontSize}px`
+  }, [fontSize])
+
+  const getFontFamilyClass = () => {
+    switch (fontFamily) {
+      case 'inter':
+        return 'font-inter'
+      case 'roboto':
+        return 'font-roboto'
+      case 'sourceHanSans':
+        return 'font-source-han-sans'
+      default:
+        return 'font-sans'
+    }
+  }
 
   const toggleTheme = () => {
     setIsDark(!isDark)
@@ -66,7 +108,7 @@ function App(): JSX.Element {
   }
 
   return (
-    <div className="flex h-screen bg-white dark:bg-gray-900">
+    <div className={cn("flex h-screen bg-white dark:bg-gray-900", getFontFamilyClass())}>
       {/* 左侧图标栏 */}
       <div className="w-16 border-r border-gray-200 dark:border-gray-700 p-4 flex flex-col items-center">
         <button
@@ -87,7 +129,7 @@ function App(): JSX.Element {
       <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 border-r border-gray-200 dark:border-gray-700 flex flex-col relative`}>
         <div className={`${isSidebarOpen ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300 h-full flex flex-col`}>
           <div className="flex-1 overflow-hidden">
-            <ChatHistory />
+            <ChatHistory sidebarOpen={isSidebarOpen} onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
           </div>
           {/* 设置面板 - 固定在底部 */}
           <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
