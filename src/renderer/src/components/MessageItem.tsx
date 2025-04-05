@@ -48,50 +48,35 @@ export const MessageItem: FC<MessageItemProps> = ({ message }) => {
     const decodedContent = decodeHtml(content)
     const themeClasses = getThemeClasses()
     
-    if (message.isThinking) {
-      const parts = decodedContent.split(/(<think>|<\/think>)/)
-      return parts.map((part, index) => {
-        if (part === '<think>' || part === '</think>') {
-          return null
-        }
-        if (index > 0 && parts[index - 1] === '<think>') {
-          return (
-            <div key={index} className="flex items-start gap-2 mt-2 text-gray-500 dark:text-gray-400">
-              <ThinkingIcon className="w-4 h-4 mt-1" />
-              <span className="italic">{part}</span>
-            </div>
-          )
-        }
-        return <div key={index}>{part}</div>
-      })
-    }
-    
-    // 使用正则表达式匹配 think 标签及其内容
-    const parts = decodedContent.split(/(<think>.*?<\/think>)/gs)
+    const parts = decodedContent.split(/(<think>|<\/think>)/)
     
     return parts.map((part, index) => {
-      if (part.startsWith('<think>') && part.endsWith('</think>')) {
-        // 提取 think 标签中的内容
-        const thinkContent = part.slice(7, -8) // 移除 <think> 和 </think>
-        
+      if (part === '<think>' || part === '</think>') {
+        return null
+      }
+      
+      // 检查是否在 <think> 标签之间
+      const isThinking = index > 0 && parts[index - 1] === '<think>'
+      
+      if (isThinking) {
         return (
-          <div key={`think-${index}`} 
+          <div 
+            key={index} 
             className={`my-4 p-4 ${themeClasses.bg} rounded-xl border-l-4 ${themeClasses.border} shadow-sm`}
           >
             <div className={`flex items-center gap-2 ${themeClasses.text} text-sm font-medium mb-2.5`}>
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
-              </svg>
+              <ThinkingIcon className="w-4 h-4" />
               思考过程
             </div>
-            <div className="text-slate-700 dark:text-slate-200 leading-relaxed">{thinkContent}</div>
+            <div className="text-slate-700 dark:text-slate-200 leading-relaxed">
+              {part}
+            </div>
           </div>
         )
       }
       
-      // 返回普通文本内容
-      return part ? <span key={`text-${index}`}>{part}</span> : null
+      // 普通文本内容
+      return part ? <div key={index}>{part}</div> : null
     })
   }
 
