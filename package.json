@@ -27,6 +27,7 @@
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^4.0.0",
     "@headlessui/react": "^1.7.18",
+    "axios": "^1.8.4",
     "electron-updater": "^6.3.9",
     "framer-motion": "^11.0.0",
     "katex": "^0.16.8",
@@ -38,7 +39,8 @@
     "rehype-katex": "^6.0.2",
     "rehype-raw": "^6.1.1",
     "remark-gfm": "^3.0.1",
-    "remark-math": "^6.0.0"
+    "remark-math": "^6.0.0",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",

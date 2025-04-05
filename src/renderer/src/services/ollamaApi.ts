@@ -1,7 +1,9 @@
-import type { Message } from '../hooks/useChatLLMStream';
-import type { Model } from '../hooks/useModelSelection';
+import type { Message } from '../types/chat';
+import type { Model } from '../stores/modelStore';
+import axios, { AxiosError } from 'axios';
+import { useApiStore } from '../stores/apiStore';
 
-interface OllamaApiModel {
+interface OllamaModel {
   name: string;
   modified_at: string;
   size: number;
@@ -14,8 +16,8 @@ interface OllamaApiModel {
   };
 }
 
-interface OllamaApiResponse {
-  models: OllamaApiModel[];
+interface OllamaListResponse {
+  models: OllamaModel[];
 }
 
 interface OllamaChatResponse {
@@ -26,35 +28,144 @@ interface OllamaChatResponse {
   done: boolean;
 }
 
-export async function checkOllamaStatus(): Promise<boolean> {
+/**
+ * 获取本地 Ollama 可用的模型列表
+ * @returns 返回模型列表，每个模型包含 id 和 name
+ */
+export async function getOllamaModels() {
+  const { getProviderConfig, setApiStatus } = useApiStore.getState();
+  const { baseUrl } = getProviderConfig('ollama');
+
   try {
-    const response = await fetch('http://localhost:11434/api/tags');
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    setApiStatus('ollama', { isLoading: true, error: null });
+    const response = await axios.get<OllamaListResponse>(`${baseUrl}/api/tags`);
+    
+    const models = response.data.models.map(model => ({
+      id: model.name,
+      name: model.name,
+      details: {
+        format: model.details.format,
+        family: model.details.family,
+        parameterSize: model.details.parameter_size,
+        quantizationLevel: model.details.quantization_level
+      }
+    }));
+
+    setApiStatus('ollama', { isAvailable: true, isLoading: false });
+    return models;
+  } catch (error) {
+    console.error('Failed to fetch Ollama models:', error);
+    setApiStatus('ollama', {
+      isAvailable: false,
+      isLoading: false,
+      error: error instanceof AxiosError ? error.message : '无法连接到 Ollama 服务'
+    });
+    if (error instanceof AxiosError) {
+      throw new Error(`无法连接到 Ollama 服务: ${error.message}`);
     }
+    throw new Error('无法连接到 Ollama 服务，请确保 Ollama 已启动');
+  }
+}
+
+/**
+ * 检查 Ollama 服务是否可用
+ * @returns 如果服务可用返回 true，否则返回 false
+ */
+export async function checkOllamaAvailable(): Promise<boolean> {
+  const { getProviderConfig, setApiStatus } = useApiStore.getState();
+  const { baseUrl } = getProviderConfig('ollama');
+
+  try {
+    await axios.get(`${baseUrl}/api/tags`);
+    setApiStatus('ollama', { isAvailable: true });
     return true;
   } catch (error) {
-    console.error('Error checking Ollama status:', error);
+    setApiStatus('ollama', { isAvailable: false });
     return false;
   }
 }
 
-export async function getOllamaModels(): Promise<Model[]> {
+/**
+ * 与 Ollama 模型进行对话
+ * @param model 模型名称
+ * @param messages 对话历史
+ * @param onMessage 接收消息的回调函数
+ * @param signal AbortController 的 signal，用于取消请求
+ */
+export async function chatWithOllama(
+  model: string,
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+  onMessage: (message: string) => void,
+  signal?: AbortSignal
+) {
+  const { getProviderConfig, setApiStatus } = useApiStore.getState();
+  const { baseUrl } = getProviderConfig('ollama');
+
   try {
-    const response = await fetch('http://localhost:11434/api/tags');
+    setApiStatus('ollama', { isLoading: true, error: null });
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        stream: true
+      }),
+      signal
+    });
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const data: OllamaApiResponse = await response.json();
-    
-    return data.models.map(model => ({
-      id: model.name,
-      name: model.name.split(':')[0],
-      provider: 'ollama' as const
-    }));
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (data.message?.content) {
+            onMessage(data.message.content);
+          }
+        } catch (e) {
+          console.error('Failed to parse Ollama response:', e);
+        }
+      }
+    }
+
+    setApiStatus('ollama', { isLoading: false });
   } catch (error) {
-    console.error('Error fetching Ollama models:', error);
-    throw error;
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.log('Chat request aborted');
+        setApiStatus('ollama', { isLoading: false });
+        return;
+      }
+      setApiStatus('ollama', {
+        isLoading: false,
+        error: `与 Ollama 模型对话失败: ${error.message}`
+      });
+      throw new Error(`与 Ollama 模型对话失败: ${error.message}`);
+    }
+    setApiStatus('ollama', {
+      isLoading: false,
+      error: '与 Ollama 模型对话失败'
+    });
+    throw new Error('与 Ollama 模型对话失败');
   }
 }
 
@@ -65,8 +176,12 @@ export async function sendMessageToOllamaStream(
   onError: (error: Error) => void,
   onComplete: () => void
 ): Promise<void> {
+  const { getProviderConfig, setApiStatus } = useApiStore.getState();
+  const { baseUrl } = getProviderConfig('ollama');
+
   try {
-    const response = await fetch('http://localhost:11434/api/chat', {
+    setApiStatus('ollama', { isLoading: true, error: null });
+    const response = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -110,6 +225,7 @@ export async function sendMessageToOllamaStream(
           }
           if (data.done) {
             onComplete();
+            setApiStatus('ollama', { isLoading: false });
             return;
           }
         } catch (error) {
@@ -119,7 +235,14 @@ export async function sendMessageToOllamaStream(
       }
     }
   } catch (error) {
-    console.error('Error in sendMessageToOllamaStream:', error);
-    onError(error instanceof Error ? error : new Error(String(error)));
+    setApiStatus('ollama', {
+      isLoading: false,
+      error: error instanceof Error ? error.message : '与 Ollama 模型对话失败'
+    });
+    if (error instanceof Error) {
+      onError(error);
+    } else {
+      onError(new Error('与 Ollama 模型对话失败'));
+    }
   }
 } 
