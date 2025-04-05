@@ -136,13 +136,13 @@ export const ChatHistory: FC<ChatHistoryProps> = ({ sidebarOpen, onToggleSidebar
                         {history.model.name} · {formatDate(history.createdAt)}
                       </div>
                     </div>
-                    <button
+                    <div
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteChat(history.id);
                       }}
                       className={cn(
-                        'p-1 rounded-lg',
+                        'p-1 rounded-lg cursor-pointer',
                         'text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400',
                         'hover:bg-gray-100 dark:hover:bg-slate-800',
                         'transition-colors'
@@ -161,7 +161,7 @@ export const ChatHistory: FC<ChatHistoryProps> = ({ sidebarOpen, onToggleSidebar
                         <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
                         <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                       </svg>
-                    </button>
+                    </div>
                   </div>
                 </button>
               </div>
