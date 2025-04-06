@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { useApiStore } from './apiStore'
 
 export interface Model {
   id: string

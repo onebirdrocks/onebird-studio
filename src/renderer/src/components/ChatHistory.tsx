@@ -1,4 +1,4 @@
-import React, { useState, FC } from 'react';
+import { useState, FC } from 'react';
 import { Plus } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { useModelStore } from '../stores/modelStore';

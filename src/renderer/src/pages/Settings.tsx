@@ -21,7 +21,6 @@ const fontFamilies: { id: FontFamily; name: string; className: string }[] = [
   { id: 'sourceHanSans', name: '思源黑体', className: 'font-source-han-sans' }
 ]
 
-const fontSizes = [12, 13, 14, 15, 16]
 
 const Settings: FC = () => {
   const [activeTab, setActiveTab] = useState<SettingTab>('general')

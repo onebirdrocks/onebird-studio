@@ -131,10 +131,7 @@ function App(): JSX.Element {
           <div className="flex-1 overflow-hidden">
             <ChatHistory sidebarOpen={isSidebarOpen} onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
           </div>
-          {/* 设置面板 - 固定在底部 */}
-          <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-            <SettingsPanel />
-          </div>
+          
         </div>
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -198,7 +195,7 @@ function App(): JSX.Element {
                   type="password"
                   value={deepseekKey}
                   onChange={(e) => setDeepseekKey(e.target.value)}
-                  placeholder="dsk-..."
+                  placeholder="dsk？？？-..."
                   className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>

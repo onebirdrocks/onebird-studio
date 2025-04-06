@@ -1,14 +1,13 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, FC } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore } from '../stores/chatStore';
 import { useModelStore } from '../stores/modelStore';
 import { useSettingStore } from '../stores/settingStore';
-import { Message } from '../types/chat';
 import { MessageItem } from './MessageItem';
 import { cn } from '../lib/utils';
 
 // 调试面板组件
-function DebugPanel({ debugInfo, isNearBottom, shouldAutoScroll }: {
+const DebugPanel: FC<{
   debugInfo: {
     scrollTop: number;
     scrollHeight: number;
@@ -17,7 +16,8 @@ function DebugPanel({ debugInfo, isNearBottom, shouldAutoScroll }: {
   };
   isNearBottom: boolean;
   shouldAutoScroll: boolean;
-}) {
+  onToggleAutoScroll: () => void;
+}> = ({ debugInfo, isNearBottom, shouldAutoScroll, onToggleAutoScroll }) => {
   return (
     <div 
       style={{
@@ -32,9 +32,10 @@ function DebugPanel({ debugInfo, isNearBottom, shouldAutoScroll }: {
         zIndex: 99999,
         fontSize: '14px',
         width: '300px',
-        pointerEvents: 'none',
         opacity: 0.9,
-        border: '2px solid white'
+        border: '2px solid white',
+        pointerEvents: 'auto',
+        cursor: 'default'
       }}
     >
       <div style={{ fontWeight: 'bold', marginBottom: '8px', textShadow: '1px 1px 2px rgba(0,0,0,0.3)' }}>调试信息面板</div>
@@ -44,15 +45,34 @@ function DebugPanel({ debugInfo, isNearBottom, shouldAutoScroll }: {
         <div>可视高度: {Math.round(debugInfo.clientHeight)}</div>
         <div>距离底部: {Math.round(debugInfo.distanceToBottom)}px</div>
         <div>是否在底部: <span style={{ color: isNearBottom ? '#86efac' : '#fca5a5' }}>{isNearBottom ? '是' : '否'}</span></div>
-        <div>自动滚动: <span style={{ color: shouldAutoScroll ? '#86efac' : '#fca5a5' }}>{shouldAutoScroll ? '开启' : '关闭'}</span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>自动滚动:</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleAutoScroll();
+            }}
+            style={{
+              backgroundColor: shouldAutoScroll ? '#86efac' : '#fca5a5',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              border: 'none',
+              color: 'black',
+              fontWeight: 'bold'
+            }}
+          >
+            {shouldAutoScroll ? '开启' : '关闭'}
+          </button>
+        </div>
       </div>
     </div>
   );
-}
+};
 
-export function ChatStream() {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+export const ChatStream: FC<{ showDebugPanel?: boolean }> = ({ showDebugPanel = false }) => {
   const messageListRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { 
     currentMessages: messages, 
     session: { isLoading, error, currentChatId }, 
@@ -73,91 +93,43 @@ export function ChatStream() {
 
   // 检查是否接近底部
   const checkIfNearBottom = useCallback(() => {
-    if (messageListRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = messageListRef.current;
-      const scrollPosition = scrollHeight - scrollTop - clientHeight;
-      const isNear = scrollPosition < 100;
-      setIsNearBottom(isNear);
-      setShouldAutoScroll(isNear);
-      
-      // 更新调试信息
-      const newDebugInfo = {
-        scrollTop,
-        scrollHeight,
-        clientHeight,
-        distanceToBottom: scrollPosition
-      };
-      setDebugInfo(newDebugInfo);
+    const container = messageListRef.current;
+    if (!container) return;
 
-      // 更新调试面板
-      const debugPanel = document.getElementById('debug-panel');
-      if (debugPanel) {
-        debugPanel.innerHTML = `
-          <div style="margin-bottom: 8px; font-weight: bold;">📊 滚动调试</div>
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <div>位置: ${Math.round(scrollTop)}px</div>
-            <div>总高: ${Math.round(scrollHeight)}px</div>
-            <div>可视: ${Math.round(clientHeight)}px</div>
-            <div>底部: ${Math.round(scrollPosition)}px</div>
-            <div>底部? <span style="color: ${isNear ? '#86efac' : '#fca5a5'}">${isNear ? '是' : '否'}</span></div>
-            <div>自动? <span style="color: ${shouldAutoScroll ? '#86efac' : '#fca5a5'}">${shouldAutoScroll ? '开' : '关'}</span></div>
-          </div>
-        `;
-      }
-      
-      return isNear;
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    const isNearBottom = distanceToBottom < 50;
+
+    setIsNearBottom(isNearBottom);
+    
+    // 如果不在底部，并且自动滚动开启，则关闭自动滚动
+    if (!isNearBottom && shouldAutoScroll) {
+      setShouldAutoScroll(false);
     }
-    return true;
+    // 如果在底部，并且自动滚动关闭，则开启自动滚动
+    else if (isNearBottom && !shouldAutoScroll) {
+      setShouldAutoScroll(true);
+    }
+
+    setDebugInfo({
+      scrollTop,
+      scrollHeight,
+      clientHeight,
+      distanceToBottom
+    });
   }, [shouldAutoScroll]);
 
-  // 组件挂载和更新时的处理
+  // 初始化调试面板
   useEffect(() => {
     console.log('ChatStream mounted');
-    
-    // 每次渲染时都打印状态
-    console.log('Debug State:', {
-      messagesCount: messages.length,
-      isLoading,
-      currentChatId,
-      shouldAutoScroll,
-      isNearBottom,
-      debugInfo
-    });
-
-    // 创建调试面板
-    const debugDiv = document.createElement('div');
-    debugDiv.id = 'debug-panel';
-    debugDiv.style.cssText = `
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background-color: #2563eb;
-      color: white;
-      padding: 12px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      font-size: 14px;
-      z-index: 99999;
-      border: 2px solid white;
-      min-width: 200px;
-      pointer-events: none;
-    `;
-    document.body.appendChild(debugDiv);
-
     // 立即更新一次调试信息
     checkIfNearBottom();
-
     return () => {
       console.log('ChatStream unmounted');
-      debugDiv.remove();
     };
   }, []);
-
-  // 定期更新调试信息
-  useEffect(() => {
-    const timer = setInterval(checkIfNearBottom, 1000);
-    return () => clearInterval(timer);
-  }, [checkIfNearBottom]);
 
   // 滚动到底部
   const scrollToBottom = useCallback(() => {
@@ -259,6 +231,11 @@ export function ChatStream() {
     }
   };
 
+  // 添加切换自动滚动的处理函数
+  const handleToggleAutoScroll = useCallback(() => {
+    setShouldAutoScroll(prev => !prev);
+  }, []);
+
   // 添加简单的控制台日志
   console.log('ChatStream rendered');
 
@@ -274,6 +251,17 @@ export function ChatStream() {
 
   return (
     <div className="flex flex-col h-full relative">
+      {/* 只在 showDebugPanel 为 true 时渲染调试面板 */}
+      {showDebugPanel && createPortal(
+        <DebugPanel
+          debugInfo={debugInfo}
+          isNearBottom={isNearBottom}
+          shouldAutoScroll={shouldAutoScroll}
+          onToggleAutoScroll={handleToggleAutoScroll}
+        />,
+        document.body
+      )}
+
       <div 
         ref={messageListRef}
         onScroll={handleScroll}
@@ -306,7 +294,7 @@ export function ChatStream() {
             "flex items-center justify-center z-50",
             "animate-bounce"
           )}
-          title="滚动到底部"
+          title="滚动到底部并开启自动滚动"
         >
           <svg 
             className="w-5 h-5" 

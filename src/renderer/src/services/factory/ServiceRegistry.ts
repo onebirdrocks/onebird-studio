@@ -1,6 +1,6 @@
 import { ApiServiceFactory } from './ApiServiceFactory';
 import { OpenAIService } from '../openai/OpenAIService';
-import { OllamaService } from '../ollama/OllamaService';
+import { chatWithOllama, checkOllamaAvailable, getOllamaModels } from '../ollamaApi';
 
 /**
  * 初始化默认的服务注册
@@ -11,7 +11,7 @@ export function initializeDefaultServices(): void {
   // 注册默认服务
   try {
     factory.registerService('openai', OpenAIService);
-    factory.registerService('ollama', OllamaService);
+    // Ollama 服务已经移动到 ollamaApi.ts，不再需要注册
   } catch (error) {
     console.warn('Some default services were already registered:', error);
   }

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { PanelLeft, Settings, MessageSquare, Sun, Moon, Send, ChevronDown, Plus } from 'lucide-react'
 import { useChatLLMStream } from './hooks/useChatLLMStream'
 import { useModelSelection, Model } from './hooks/useModelSelection'
+import { useChatStore } from './stores/chatStore'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -77,6 +78,7 @@ export default function ChatStream() {
   const [tooltipPositions, setTooltipPositions] = useState<Record<string, TooltipPosition>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const modelSelectRef = useRef<HTMLDivElement>(null);
+  const { initializeStore } = useChatStore()
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -105,6 +107,11 @@ export default function ChatStream() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    // 初始化聊天记录
+    initializeStore()
+  }, [])
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);

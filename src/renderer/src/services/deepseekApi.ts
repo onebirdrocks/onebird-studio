@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { Message } from '../types/chat';
-import type { ApiModel, ChatCallbacks } from '../types/api';
+import type { ChatCallbacks } from '../types/api';
 import { useModelStore } from '../stores/modelStore';
 import { useApiStore } from '../stores/apiStore';
 
