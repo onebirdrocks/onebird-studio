@@ -1,12 +1,12 @@
 import { createBrowserRouter } from 'react-router-dom'
-import Chat from './pages/Chat'
+import { ChatStream } from './components/ChatStream'
 import Settings from './pages/Settings'
 import Agent from './pages/Agent'
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Chat />,
+    element: <ChatStream />,
   },
   {
     path: '/settings',

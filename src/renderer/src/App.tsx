@@ -198,7 +198,7 @@ function App(): JSX.Element {
                   type="password"
                   value={deepseekKey}
                   onChange={(e) => setDeepseekKey(e.target.value)}
-                  placeholder="dsk-..."
+                  placeholder="dsk？？？-..."
                   className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>

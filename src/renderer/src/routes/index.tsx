@@ -1,7 +1,8 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 import MainLayout from '@renderer/layouts/MainLayout'
-import Chat from '@renderer/Chat'
+import { ChatStream } from '@renderer/components/ChatStream'
 import Settings from '@renderer/pages/Settings'
+import Help from '@renderer/pages/Help'
 
 export const router = createBrowserRouter([
   {
@@ -10,15 +11,15 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/chat" replace />
-      },
-      {
-        path: 'chat',
-        element: <Chat />
+        element: <ChatStream />
       },
       {
         path: 'settings',
         element: <Settings />
+      },
+      {
+        path: 'help',
+        element: <Help />
       }
     ]
   }
