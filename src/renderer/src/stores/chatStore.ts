@@ -52,19 +52,36 @@ export const useChatStore = create<ChatStore>()(
           const state = get()
           const sortedHistories = computeSortedHistories(state.history.items, state.history.order)
           
-          if (sortedHistories.length > 0 && !state.session.currentChatId) {
-            const latestChat = sortedHistories[0]
-            set({
+          if (sortedHistories.length > 0) {
+            // 如果没有当前聊天，选择最新的一个
+            const chatId = state.session.currentChatId || sortedHistories[0].id
+            const currentChat = state.history.items[chatId]
+            
+            if (currentChat) {
+              set({
+                session: {
+                  ...state.session,
+                  currentChatId: chatId,
+                  isLoading: false,
+                  error: null
+                },
+                currentChat: currentChat,
+                currentMessages: currentChat.messages || [],
+                sortedHistories
+              })
+            }
+          } else {
+            set({ 
+              sortedHistories,
               session: {
                 ...state.session,
-                currentChatId: latestChat.id
+                currentChatId: null,
+                isLoading: false,
+                error: null
               },
-              currentChat: latestChat,
-              currentMessages: latestChat.messages,
-              sortedHistories
+              currentChat: null,
+              currentMessages: []
             })
-          } else {
-            set({ sortedHistories })
           }
         },
 
