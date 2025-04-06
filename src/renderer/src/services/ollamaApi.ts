@@ -1,6 +1,5 @@
 import type { Message } from '../types/chat';
 import type {
-  OllamaModel,
   OllamaListResponse,
   OllamaChatResponse,
   ApiModel,

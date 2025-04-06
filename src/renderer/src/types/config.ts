@@ -1,4 +1,4 @@
-import { ServiceConfigMap, Provider } from './api';
+import { ServiceConfigMap } from './api';
 
 /**
  * 配置版本信息

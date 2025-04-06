@@ -1,9 +1,8 @@
-import React, { useRef, useEffect, useState, useCallback, FC } from 'react';
+import { useRef, useEffect, useState, useCallback, FC } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore } from '../stores/chatStore';
 import { useModelStore } from '../stores/modelStore';
 import { useSettingStore } from '../stores/settingStore';
-import { Message } from '../types/chat';
 import { MessageItem } from './MessageItem';
 import { cn } from '../lib/utils';
 
