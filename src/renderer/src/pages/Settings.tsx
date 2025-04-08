@@ -29,7 +29,7 @@ const Settings: FC = () => {
   const [validationStatus, setValidationStatus] = useState<Record<string, 'success' | 'error' | null>>({})
   const { themeColor, setThemeColor, fontSize, setFontSize, fontFamily, setFontFamily } = useSettingStore()
   const { apiKeys, setApiKey, removeApiKey } = useModelStore()
-  const { mcpServers, addServer, removeServer, validateConfig, fetchServerTools, serverTools } = useMCPStore()
+  const { mcpServers, addServer, removeServer, validateConfig, fetchServerTools, serverTools, updateMCPConfig } = useMCPStore()
   const [showAddServer, setShowAddServer] = useState(false)
   const [newServerName, setNewServerName] = useState('')
   const [newServerConfig, setNewServerConfig] = useState('')
@@ -39,10 +39,10 @@ const Settings: FC = () => {
   const [editingServer, setEditingServer] = useState<string | null>(null)
   const [enabledServers, setEnabledServers] = useState<Record<string, boolean>>({})
 
-  // 添加 useEffect 来在组件加载时获取工具列表
+  // 修改 useEffect 来获取工具列表
   useEffect(() => {
-    Object.entries(mcpServers).forEach(([name, config]) => {
-      fetchServerTools(name, config)
+    Object.entries(mcpServers).forEach(([name]) => {
+      fetchServerTools(name)
     })
   }, [mcpServers])
 
@@ -98,12 +98,30 @@ const Settings: FC = () => {
       if (editingServer && editingServer !== newServerName) {
         removeServer(editingServer)
       }
-      addServer(newServerName, config)
-      setShowAddServer(false)
-      setNewServerName('')
-      setNewServerConfig('')
-      setConfigError(null)
-      setEditingServer(null)
+      
+      // 构建完整的配置对象
+      const fullConfig = {
+        mcpServers: {
+          ...mcpServers,
+          [newServerName]: config
+        }
+      }
+
+      // 更新 MCP 配置并初始化客户端
+      updateMCPConfig(JSON.stringify(fullConfig)).then(result => {
+        if (result.success) {
+          addServer(newServerName, config)
+          setShowAddServer(false)
+          setNewServerName('')
+          setNewServerConfig('')
+          setConfigError(null)
+          setEditingServer(null)
+          // 获取新服务器的工具列表
+          fetchServerTools(newServerName)
+        } else {
+          setConfigError(`更新 MCP 配置失败: ${result.error}`)
+        }
+      })
     } catch (e) {
       setConfigError('配置格式错误')
     }
@@ -142,8 +160,19 @@ const Settings: FC = () => {
         addServer(name, config)
       })
 
-      setShowFullConfig(false)
-      setConfigError(null)
+      // 更新 MCP 配置并初始化客户端
+      updateMCPConfig(fullConfig).then(result => {
+        if (result.success) {
+          setShowFullConfig(false)
+          setConfigError(null)
+          // 重新获取所有服务器的工具列表
+          Object.keys(config.mcpServers).forEach(serverName => {
+            fetchServerTools(serverName)
+          })
+        } else {
+          setConfigError(`更新 MCP 配置失败: ${result.error}`)
+        }
+      })
     } catch (e) {
       setConfigError('无效的 JSON 格式')
     }

@@ -18,7 +18,8 @@ interface MCPState {
   addServer: (name: string, config: MCPServerConfig) => void
   removeServer: (name: string) => void
   validateConfig: (configStr: string) => { isValid: boolean; error?: string }
-  fetchServerTools: (serverName: string, config: MCPServerConfig) => Promise<void>
+  fetchServerTools: (serverName: string) => Promise<void>
+  updateMCPConfig: (configStr: string) => Promise<{ success: boolean; error?: string }>
 }
 
 export const useMCPStore = create<MCPState>((set, get) => ({
@@ -53,9 +54,9 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     }
   },
 
-  fetchServerTools: async (serverName: string, config: MCPServerConfig) => {
+  fetchServerTools: async (serverName: string) => {
     try {
-      const tools = await window.electron.ipcRenderer.invoke('get-mcp-tools', config)
+      const tools = await window.electron.ipcRenderer.invoke('get-mcp-tools', serverName)
       set((state) => ({
         serverTools: {
           ...state.serverTools,
@@ -64,6 +65,16 @@ export const useMCPStore = create<MCPState>((set, get) => ({
       }))
     } catch (error) {
       console.error('Failed to fetch server tools:', error)
+    }
+  },
+
+  updateMCPConfig: async (configStr: string) => {
+    try {
+      const result = await window.electron.ipcRenderer.invoke('update-mcp-config', configStr)
+      return result
+    } catch (error: any) {
+      console.error('Failed to update MCP config:', error)
+      return { success: false, error: error.message }
     }
   }
 })) 

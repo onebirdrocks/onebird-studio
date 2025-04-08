@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 // 定义允许的 IPC 通道
 const validChannels = [
   'get-mcp-tools',
+  'update-mcp-config',
   'ping',
   'chat-message',
   'chat-reply',
