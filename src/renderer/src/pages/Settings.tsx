@@ -1,7 +1,7 @@
 import { FC, useState, useEffect } from 'react'
 import { useSettingStore, ThemeColor, FontFamily } from '../stores/settingStore'
 import { useModelStore } from '../stores/modelStore'
-import { useMCPStore, MCPServers } from '../stores/mcpStore'
+import { useMCPStore, MCPServers, MCPServerConfig } from '../stores/mcpStore'
 import { cn } from '../lib/utils'
 import { checkOpenAIApiKey } from '../services/openaiApi'
 import { checkDeepSeekApiKey } from '../services/deepseekApi'
@@ -77,13 +77,35 @@ const Settings: FC = () => {
     setShowAddServer(true)
   }
 
+  // 添加配置比较函数
+  const isServerConfigChanged = (oldConfig: MCPServerConfig | undefined, newConfigStr: string): boolean => {
+    try {
+      if (!oldConfig) return true // 如果是新服务器，则认为是变化的
+      const newConfig = JSON.parse(newConfigStr)
+      
+      // 比较 command
+      if (oldConfig.command !== newConfig.command) return true
+      
+      // 比较 args 数组
+      if (!Array.isArray(newConfig.args) || oldConfig.args.length !== newConfig.args.length) return true
+      for (let i = 0; i < oldConfig.args.length; i++) {
+        if (oldConfig.args[i] !== newConfig.args[i]) return true
+      }
+      
+      return false
+    } catch (e) {
+      return true // 如果解析失败，认为是变化的
+    }
+  }
+
   const handleAddServer = () => {
     if (!newServerName.trim()) {
       setConfigError('服务器名称不能为空')
       return
     }
 
-    if (mcpServers[newServerName] && !editingServer) {
+    // 检查服务器名称是否重复
+    if (mcpServers[newServerName] && (!editingServer || editingServer !== newServerName)) {
       setConfigError('服务器名称已存在')
       return
     }
@@ -96,6 +118,24 @@ const Settings: FC = () => {
 
     try {
       const config = JSON.parse(newServerConfig)
+      
+      // 检查配置是否发生实际变化
+      const nameChanged = editingServer && editingServer !== newServerName
+      const configChanged = isServerConfigChanged(
+        editingServer ? mcpServers[editingServer] : undefined,
+        newServerConfig
+      )
+
+      // 如果名称和配置都没有变化，直接关闭窗口
+      if (!nameChanged && !configChanged) {
+        setShowAddServer(false)
+        setNewServerName('')
+        setNewServerConfig('')
+        setConfigError(null)
+        setEditingServer(null)
+        return
+      }
+
       if (editingServer && editingServer !== newServerName) {
         removeServer(editingServer)
       }
@@ -108,7 +148,7 @@ const Settings: FC = () => {
         }
       }
 
-      setIsLoading(true)  // 开始加载
+      setIsLoading(true)
 
       // 更新 MCP 配置并初始化客户端
       updateMCPConfig(JSON.stringify(fullConfig)).then(result => {
@@ -126,10 +166,10 @@ const Settings: FC = () => {
         } else {
           setConfigError(`更新 MCP 配置失败: ${result.error}`)
         }
-        setIsLoading(false)  // 结束加载
+        setIsLoading(false)
       }).catch(error => {
         setConfigError(`更新失败: ${error.message}`)
-        setIsLoading(false)  // 错误时也要结束加载
+        setIsLoading(false)
       })
     } catch (e) {
       setConfigError('配置格式错误')
@@ -144,8 +184,95 @@ const Settings: FC = () => {
     setShowFullConfig(true)
   }
 
+  // 添加检查重复 key 的函数
+  const checkDuplicateKeys = (jsonStr: string): { hasDuplicate: boolean; duplicateKeys: string[] } => {
+    try {
+      // 将字符串解析为 JSON 对象
+      const config = JSON.parse(jsonStr)
+      if (!config.mcpServers || typeof config.mcpServers !== 'object') {
+        return { hasDuplicate: false, duplicateKeys: [] }
+      }
+
+      // 获取原始字符串中 mcpServers 对象的起始位置
+      const mcpServersStart = jsonStr.indexOf('"mcpServers"')
+      if (mcpServersStart === -1) {
+        return { hasDuplicate: false, duplicateKeys: [] }
+      }
+
+      // 从 mcpServers 开始的子字符串
+      const mcpServersStr = jsonStr.slice(mcpServersStart)
+      
+      // 使用正则表达式匹配所有第一层的键
+      // 这个正则表达式会匹配 "key": { 这样的模式，并且会考虑嵌套的括号
+      const keys: string[] = []
+      const duplicateKeys: string[] = []
+      let depth = 0
+      let currentKey = ''
+      let isInKey = false
+
+      for (let i = 0; i < mcpServersStr.length; i++) {
+        const char = mcpServersStr[i]
+        
+        if (char === '{') {
+          depth++
+          // 第一个 { 是 mcpServers 的开始，跳过
+          if (depth === 1) continue
+        } else if (char === '}') {
+          depth--
+          if (depth === 0) break // 到达 mcpServers 对象的结束
+        } else if (depth === 1) { // 只在第一层处理键名
+          if (char === '"' && mcpServersStr[i-1] !== '\\') {
+            if (!isInKey) {
+              isInKey = true
+              currentKey = ''
+            } else {
+              isInKey = false
+              // 检查是否为服务器配置的键（后面跟着冒号和对象）
+              let j = i + 1
+              while (j < mcpServersStr.length && /\s/.test(mcpServersStr[j])) j++ // 跳过空白
+              if (mcpServersStr[j] === ':') {
+                while (j < mcpServersStr.length && /\s/.test(mcpServersStr[j+1])) j++ // 跳过空白
+                if (mcpServersStr[j+1] === '{') {
+                  if (keys.includes(currentKey)) {
+                    if (!duplicateKeys.includes(currentKey)) {
+                      duplicateKeys.push(currentKey)
+                    }
+                  } else {
+                    keys.push(currentKey)
+                  }
+                }
+              }
+            }
+            continue
+          }
+          if (isInKey) {
+            currentKey += char
+          }
+        }
+      }
+
+      return {
+        hasDuplicate: duplicateKeys.length > 0,
+        duplicateKeys
+      }
+    } catch (e) {
+      console.error('检查重复键时出错:', e)
+      return {
+        hasDuplicate: false,
+        duplicateKeys: []
+      }
+    }
+  }
+
   const handleSaveFullConfig = () => {
     try {
+      // 首先检查是否有重复的 key
+      const { hasDuplicate, duplicateKeys } = checkDuplicateKeys(fullConfig)
+      if (hasDuplicate) {
+        setConfigError(`配置错误：JSON 中存在重复的键名：${duplicateKeys.join(', ')}`)
+        return
+      }
+
       const config = JSON.parse(fullConfig)
       if (!config.mcpServers || typeof config.mcpServers !== 'object') {
         setConfigError('配置格式错误：缺少 mcpServers 对象')
@@ -159,6 +286,20 @@ const Settings: FC = () => {
           setConfigError(`服务器 "${name}" 配置错误：${validation.error}`)
           return
         }
+      }
+
+      // 检查配置是否发生实际变化
+      const oldConfig = {
+        mcpServers: mcpServers
+      }
+      const configChanged = JSON.stringify(oldConfig) !== fullConfig
+
+      if (!configChanged) {
+        // 如果配置没有变化，直接关闭窗口
+        setShowFullConfig(false)
+        setShowAddServer(false)
+        setConfigError(null)
+        return
       }
 
       setIsLoading(true)
@@ -175,7 +316,7 @@ const Settings: FC = () => {
       updateMCPConfig(fullConfig).then(result => {
         if (result.success) {
           setShowFullConfig(false)
-          setShowAddServer(false)  // 关闭添加服务器窗口
+          setShowAddServer(false)
           setConfigError(null)
           // 重新获取所有服务器的工具列表
           Object.keys(config.mcpServers).forEach(serverName => {
