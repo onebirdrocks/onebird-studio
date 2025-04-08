@@ -9,6 +9,7 @@ import { getDeepSeekModels } from '../services/deepseekApi';
 import type { Model } from '../stores/modelStore';
 import { cn } from '../lib/utils';
 import { FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface NewChatDialogProps {
   isOpen: boolean;
@@ -47,6 +48,7 @@ const PROVIDERS: Provider[] = [
 export const NewChatDialog: FC<NewChatDialogProps> = ({ isOpen, onClose, onConfirm }) => {
   const { apiKeys } = useModelStore();
   const { getProviderConfig } = useApiStore();
+  const navigate = useNavigate();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [availableModels, setAvailableModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -159,8 +161,19 @@ export const NewChatDialog: FC<NewChatDialogProps> = ({ isOpen, onClose, onConfi
                 </Dialog.Title>
 
                 {error && (
-                  <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
-                    {error}
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 flex items-center justify-between">
+                    <span>{error}</span>
+                    {error.includes('API 密钥') && (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          navigate('/settings?tab=models');
+                        }}
+                        className="ml-4 px-3 py-1 text-sm bg-red-600 dark:bg-red-500 text-white rounded-md hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
+                      >
+                        前往设置
+                      </button>
+                    )}
                   </div>
                 )}
 

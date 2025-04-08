@@ -5,6 +5,7 @@ import { useMCPStore, MCPServers, MCPServerConfig } from '../stores/mcpStore'
 import { cn } from '../lib/utils'
 import { checkOpenAIApiKey } from '../services/openaiApi'
 import { checkDeepSeekApiKey } from '../services/deepseekApi'
+import { useSearchParams } from 'react-router-dom'
 
 type SettingTab = 'general' | 'models' | 'mcp' | 'beta'
 
@@ -24,7 +25,9 @@ const fontFamilies: { id: FontFamily; name: string; className: string }[] = [
 
 
 const Settings: FC = () => {
-  const [activeTab, setActiveTab] = useState<SettingTab>('general')
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') as SettingTab;
+  const [activeTab, setActiveTab] = useState<SettingTab>(initialTab || 'general')
   const [validating, setValidating] = useState<Record<string, boolean>>({})
   const [validationStatus, setValidationStatus] = useState<Record<string, 'success' | 'error' | null>>({})
   const { themeColor, setThemeColor, fontSize, setFontSize, fontFamily, setFontFamily } = useSettingStore()
