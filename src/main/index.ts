@@ -4,7 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import fs from 'fs'
 import icon from '../../resources/icon.png?asset'
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer'
-import { setupMockMCPService } from './mockMCPService'
+import { setupMockMCPService, initializeOllamaClient } from './mockMCPService'
 
 const configPath = join(app.getPath('userData'), 'config.json')
 const DEFAULT_ZOOM_LEVEL = -0.5  // 可以根据需要调整这个值
@@ -178,6 +178,14 @@ app.whenReady().then(async () => {
 
   electronApp.setAppUserModelId('com.electron')
   setupMockMCPService()
+  
+  // 初始化 ollama 客户端
+  try {
+    await initializeOllamaClient()
+    console.log('Successfully initialized ollama client')
+  } catch (error) {
+    console.error('Failed to initialize ollama client:', error)
+  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

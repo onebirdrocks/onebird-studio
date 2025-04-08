@@ -12,8 +12,98 @@ interface MCPServerConfig {
   args: string[]
 }
 
+interface MCPClientWrapper {
+  client: Client
+  transport: StdioClientTransport
+  isConnecting: boolean
+  isConnected: boolean
+  lastError?: Error
+}
+
 // MCP Clients map to store initialized clients
-const mcpClients: Map<string, Client> = new Map();
+const mcpClients: Map<string, MCPClientWrapper> = new Map();
+
+// 连接超时时间（毫秒）
+const CONNECTION_TIMEOUT = 10000;
+
+// 创建一个带超时的 Promise
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]);
+}
+
+// 初始化单个客户端
+async function initializeClient(name: string, config: MCPServerConfig): Promise<void> {
+  try {
+    console.log(`Initializing client for server: ${name}`);
+    
+    // 如果已经有正在连接的客户端，跳过
+    const existingClient = mcpClients.get(name);
+    if (existingClient?.isConnecting) {
+      console.log(`Client ${name} is already connecting, skipping`);
+      return;
+    }
+
+    // 如果是已连接的客户端，保持现有连接
+    if (existingClient?.isConnected) {
+      console.log(`Client ${name} is already connected, keeping existing connection`);
+      return;
+    }
+
+    const transport = new StdioClientTransport({
+      command: config.command,
+      args: config.args
+    });
+
+    const client = new Client(
+      {
+        name: name,
+        version: "1.0.0"
+      },
+      {
+        capabilities: {
+          prompts: {},
+          resources: {},
+          tools: {}
+        }
+      }
+    );
+
+    // 创建客户端包装器
+    const wrapper: MCPClientWrapper = {
+      client,
+      transport,
+      isConnecting: true,
+      isConnected: false
+    };
+    mcpClients.set(name, wrapper);
+
+    try {
+      console.log(`Attempting to connect client for server: ${name}`);
+      await withTimeout(
+        client.connect(transport),
+        CONNECTION_TIMEOUT,
+        `Connection timeout for server: ${name}`
+      );
+      wrapper.isConnected = true;
+      console.log(`Successfully connected client for server: ${name}`);
+    } catch (error) {
+      wrapper.lastError = error as Error;
+      console.error(`Failed to connect client for server ${name}:`, error);
+      // 如果连接失败，从 map 中移除
+      mcpClients.delete(name);
+    } finally {
+      wrapper.isConnecting = false;
+    }
+  } catch (error) {
+    console.error(`Error initializing client for server ${name}:`, error);
+    // 确保在出错时从 map 中移除
+    mcpClients.delete(name);
+    throw error;
+  }
+}
 
 // Initialize clients from config
 async function loadClients(configStr: string): Promise<void> {
@@ -24,53 +114,32 @@ async function loadClients(configStr: string): Promise<void> {
       throw new Error('Invalid config: missing mcpServers object');
     }
 
-    // Clear existing clients
-    for (const [name, client] of mcpClients.entries()) {
-      try {
-        console.log(`Disconnecting client for server: ${name}`);
-        // 注意：如果 Client 类型没有 disconnect 方法，我们就直接删除它
-      } catch (error) {
-        console.warn(`Failed to disconnect client for server ${name}:`, error);
+    // 保存当前已连接的客户端列表
+    const connectedClients = new Map(
+      Array.from(mcpClients.entries())
+        .filter(([_, wrapper]) => wrapper.isConnected)
+    );
+
+    // 初始化新的客户端（并行处理）
+    const initPromises = Object.entries(config.mcpServers).map(([name, serverConfig]) => 
+      initializeClient(name, serverConfig as MCPServerConfig)
+        .catch(error => {
+          console.error(`Failed to initialize client for server ${name}:`, error);
+          // 不抛出错误，让其他客户端继续初始化
+        })
+    );
+
+    // 等待所有客户端初始化完成
+    await Promise.all(initPromises);
+
+    // 恢复之前已连接的客户端
+    for (const [name, wrapper] of connectedClients.entries()) {
+      if (!mcpClients.has(name)) {
+        mcpClients.set(name, wrapper);
       }
     }
-    mcpClients.clear();
 
-    // Initialize new clients
-    for (const [name, serverConfig] of Object.entries(config.mcpServers)) {
-      console.log(`Initializing client for server: ${name}`);
-      const typedConfig = serverConfig as MCPServerConfig;
-      
-      console.log(`Creating transport with command: ${typedConfig.command}, args:`, typedConfig.args);
-      const transport = new StdioClientTransport({
-        command: typedConfig.command,
-        args: typedConfig.args
-      });
-
-      const client = new Client(
-        {
-          name: name,
-          version: "1.0.0"
-        },
-        {
-          capabilities: {
-            prompts: {},
-            resources: {},
-            tools: {}
-          }
-        }
-      );
-
-      try {
-        console.log(`Attempting to connect client for server: ${name}`);
-        await client.connect(transport);
-        console.log(`Successfully connected client for server: ${name}`);
-        mcpClients.set(name, client);
-      } catch (error) {
-        console.error(`Failed to connect client for server ${name}:`, error);
-        throw error;
-      }
-    }
-    console.log('Successfully loaded all MCP clients');
+    console.log('Finished loading all MCP clients');
   } catch (error) {
     console.error('Failed to load MCP clients:', error);
     throw error;
@@ -84,9 +153,16 @@ async function getMCPClientByName(serverName: string): Promise<Client | null> {
     console.log('No MCP clients initialized');
     return null;
   }
-  const client = mcpClients.get(serverName);
-  console.log(`Client ${client ? 'found' : 'not found'} for server: ${serverName}`);
-  return client || null;
+  const wrapper = mcpClients.get(serverName);
+  if (!wrapper) {
+    console.log(`No client found for server: ${serverName}`);
+    return null;
+  }
+  if (!wrapper.isConnected) {
+    console.log(`Client for server ${serverName} is not connected. Last error:`, wrapper.lastError);
+    return null;
+  }
+  return wrapper.client;
 }
 
 // Mock tools data
@@ -133,7 +209,11 @@ export function setupMockMCPService() {
       }
       
       console.log(`Listing tools for server: ${serverName}`);
-      const toolsResponse = await client.listTools();
+      const toolsResponse = await withTimeout(
+        client.listTools(),
+        CONNECTION_TIMEOUT,
+        `Tools listing timeout for server: ${serverName}`
+      );
       console.log(`Raw tools response for server ${serverName}:`, toolsResponse);
 
       // 检查返回的数据结构
@@ -177,6 +257,30 @@ export function setupMockMCPService() {
       return [];
     }
   });
+}
+
+// 初始化 ollama 客户端
+export async function initializeOllamaClient(): Promise<void> {
+  const ollamaConfig: MCPServerConfig = {
+    command: 'ollama',
+    args: ['serve', '--verbose']
+  };
+
+  try {
+    // 先检查 ollama 服务是否已经在运行
+    const response = await fetch('http://localhost:11434/api/version');
+    if (response.ok) {
+      console.log('Ollama service is already running');
+      // 创建客户端连接
+      await initializeClient('ollama', ollamaConfig);
+      return;
+    }
+  } catch (error) {
+    console.log('Ollama service is not running, attempting to start...');
+  }
+
+  // 如果服务未运行，启动新的服务
+  await initializeClient('ollama', ollamaConfig);
 }
 
 export { loadClients, getMCPClientByName }; 
