@@ -67,16 +67,35 @@ export async function checkOpenAIApiKey(apiKey: string): Promise<boolean> {
   const { baseUrl } = getProviderConfig('openai');
 
   try {
+    console.log('正在验证 OpenAI API key...', {
+      baseUrl,
+      keyLength: apiKey?.length
+    });
+
     const openai = new OpenAI({
       apiKey,
       baseURL: baseUrl,
       dangerouslyAllowBrowser: true
     });
+
+    console.log('正在尝试获取 OpenAI 模型列表...');
     await openai.models.list();
+    
+    console.log('OpenAI API key 验证成功');
     setApiStatus('openai', { isAvailable: true });
     return true;
   } catch (error) {
-    setApiStatus('openai', { isAvailable: false });
+    console.error('OpenAI API key 验证失败:', {
+      error,
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      status: error instanceof Error && 'status' in error ? (error as any).status : 'Unknown',
+      response: error instanceof Error && 'response' in error ? (error as any).response : 'No response'
+    });
+    setApiStatus('openai', { 
+      isAvailable: false,
+      error: error instanceof Error ? error.message : '验证失败'
+    });
     return false;
   }
 }

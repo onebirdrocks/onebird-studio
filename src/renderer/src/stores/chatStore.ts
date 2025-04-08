@@ -262,7 +262,7 @@ export const useChatStore = create<ChatStore>()(
 
             // 使用这个聊天的 AbortController
             await chatService(
-              model.id,
+              model.provider === 'ollama' ? model.name : model.id,
               chatMessages,
               {
                 onToken: (token) => {
@@ -398,7 +398,7 @@ export const useChatStore = create<ChatStore>()(
             }[chat.model.provider]
 
             await chatService(
-              chat.model.id, 
+              chat.model.provider === 'ollama' ? chat.model.name : chat.model.id,
               [titleMessage], 
               callbacks,
               titleAbortController.signal

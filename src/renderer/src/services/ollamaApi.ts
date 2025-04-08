@@ -106,30 +106,56 @@ export async function chatWithOllama(
   signal?: AbortSignal
 ): Promise<void> {
   const { getProviderConfig, setApiStatus } = useApiStore.getState();
-  const { baseUrl } = getProviderConfig('ollama');
   const { onToken, onError, onComplete } = callbacks;
 
   try {
+    // 检查模型ID
+    if (!modelId || typeof modelId !== 'string' || modelId.trim() === '') {
+      throw new Error('模型ID不能为空');
+    }
+
     setApiStatus('ollama', { isLoading: true, error: null });
-    const response = await fetch(`${baseUrl}/api/chat`, {
+    
+    // 转换消息格式，确保系统消息被正确处理
+    const formattedMessages = messages.map(msg => ({
+      role: msg.role === 'system' ? 'system' : msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msg.content
+    }));
+
+    const requestBody = {
+      model: modelId.trim(),
+      messages: formattedMessages,
+      stream: true
+    };
+
+    // 添加详细的调试日志
+    console.log('Ollama 请求详情:', {
+      modelId: modelId,
+      url: `${BASE_URL}/api/chat`,
+      requestBody: JSON.stringify(requestBody, null, 2),
+      messagesCount: messages.length,
+      firstMessage: messages[0]?.content.substring(0, 100) // 只显示第一条消息的前100个字符
+    });
+
+    const response = await fetch(`${BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: modelId,
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        })),
-        stream: true
-      }),
+      body: JSON.stringify(requestBody),
       signal
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
+      const errorInfo = {
+        status: response.status,
+        statusText: response.statusText,
+        errorData,
+        requestBody: requestBody
+      };
+      console.error('Ollama API 错误详情:', errorInfo);
+      throw new Error(`Ollama API 错误: ${errorData}`);
     }
 
     if (!response.body) {

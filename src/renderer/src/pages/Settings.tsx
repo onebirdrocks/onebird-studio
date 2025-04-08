@@ -38,6 +38,7 @@ const Settings: FC = () => {
   const [fullConfig, setFullConfig] = useState('')
   const [editingServer, setEditingServer] = useState<string | null>(null)
   const [enabledServers, setEnabledServers] = useState<Record<string, boolean>>({})
+  const [isLoading, setIsLoading] = useState(false)
 
   // 修改 useEffect 来获取工具列表
   useEffect(() => {
@@ -107,6 +108,8 @@ const Settings: FC = () => {
         }
       }
 
+      setIsLoading(true)  // 开始加载
+
       // 更新 MCP 配置并初始化客户端
       updateMCPConfig(JSON.stringify(fullConfig)).then(result => {
         if (result.success) {
@@ -118,9 +121,15 @@ const Settings: FC = () => {
           setEditingServer(null)
           // 获取新服务器的工具列表
           fetchServerTools(newServerName)
+          // 重新生成客户端
+          window.electron.ipcRenderer.invoke('regenerate-mcp-client')
         } else {
           setConfigError(`更新 MCP 配置失败: ${result.error}`)
         }
+        setIsLoading(false)  // 结束加载
+      }).catch(error => {
+        setConfigError(`更新失败: ${error.message}`)
+        setIsLoading(false)  // 错误时也要结束加载
       })
     } catch (e) {
       setConfigError('配置格式错误')
@@ -152,6 +161,8 @@ const Settings: FC = () => {
         }
       }
 
+      setIsLoading(true)
+
       // 更新所有服务器配置
       Object.entries(mcpServers).forEach(([name]) => {
         removeServer(name)
@@ -164,17 +175,25 @@ const Settings: FC = () => {
       updateMCPConfig(fullConfig).then(result => {
         if (result.success) {
           setShowFullConfig(false)
+          setShowAddServer(false)  // 关闭添加服务器窗口
           setConfigError(null)
           // 重新获取所有服务器的工具列表
           Object.keys(config.mcpServers).forEach(serverName => {
             fetchServerTools(serverName)
           })
+          // 重新生成客户端
+          window.electron.ipcRenderer.invoke('regenerate-mcp-client')
         } else {
           setConfigError(`更新 MCP 配置失败: ${result.error}`)
         }
+        setIsLoading(false)
+      }).catch(error => {
+        setConfigError(`更新失败: ${error.message}`)
+        setIsLoading(false)
       })
     } catch (e) {
       setConfigError('无效的 JSON 格式')
+      setIsLoading(false)
     }
   }
 
@@ -629,6 +648,19 @@ const Settings: FC = () => {
           </button>
         ))}
       </div>
+      {isLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center space-x-3">
+              <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-gray-900 dark:text-white">正在加载 MCP 工具列表...</span>
+            </div>
+          </div>
+        </div>
+      )}
       {renderTabContent()}
     </div>
   )

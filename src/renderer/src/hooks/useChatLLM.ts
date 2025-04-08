@@ -26,6 +26,8 @@ export function useChatLLM() {
     isModelAvailable: false
   });
 
+  const [modelId, setModelId] = useState<string>('');
+
   const checkStatus = useCallback(async () => {
     try {
       const isAvailable = await checkOllamaAvailable();
@@ -65,6 +67,14 @@ export function useChatLLM() {
       return;
     }
 
+    if (!modelId) {
+      setState(prev => ({
+        ...prev,
+        error: '未选择模型'
+      }));
+      return;
+    }
+
     const newMessages = [...state.messages, { role: 'user' as const, content: userMessage }];
     setState(prev => ({
       ...prev,
@@ -81,7 +91,7 @@ export function useChatLLM() {
 
       let accumulatedResponse = '';
       await chatWithOllama(
-        'deepseek-r1:latest',
+        modelId,
         newMessages,
         {
           onToken: (token) => {
@@ -120,7 +130,7 @@ export function useChatLLM() {
         isLoading: false
       }));
     }
-  }, [state.isServiceAvailable, state.isModelAvailable, state.messages]);
+  }, [state.isServiceAvailable, state.isModelAvailable, state.messages, modelId]);
 
   const clearMessages = useCallback(() => {
     setState(prev => ({
@@ -156,6 +166,8 @@ export function useChatLLM() {
     isModelAvailable: state.isModelAvailable,
     sendMessage,
     clearMessages,
-    updateSystemPrompt
+    updateSystemPrompt,
+    setModelId,
+    modelId
   };
 }

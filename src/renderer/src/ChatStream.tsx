@@ -65,7 +65,8 @@ export default function ChatStream() {
     isModelAvailable, 
     clearMessages,
     checkStatus,
-    initializeChat 
+    initializeChat,
+    setModelId
   } = useChatLLMStream()
   const { 
     selectedModel, 
@@ -297,6 +298,7 @@ export default function ChatStream() {
     
     console.log('Setting selected model to:', newModel);
     setSelectedModel(newModel);
+    setModelId(newModel.name);
     setIsNewChatDialogOpen(false);
   };
 
@@ -307,6 +309,11 @@ export default function ChatStream() {
       setStreamingMessage(prev => prev + token);
     });
     setInput('');
+  };
+
+  const handleModelSelect = (model: Model) => {
+    setSelectedModel(model);
+    setModelId(model.name);
   };
 
   const renderSidebar = () => (
