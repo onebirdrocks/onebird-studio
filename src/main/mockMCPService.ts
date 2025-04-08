@@ -18,6 +18,7 @@ interface MCPClientWrapper {
   isConnecting: boolean
   isConnected: boolean
   lastError?: Error
+  childProcess?: any
 }
 
 // MCP Clients map to store initialized clients
@@ -34,7 +35,64 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: st
   return Promise.race([promise, timeoutPromise]);
 }
 
-// 初始化单个客户端
+// 修改进程清理函数
+function cleanupProcess(wrapper: MCPClientWrapper) {
+  if (wrapper.childProcess) {
+    try {
+      console.log('Cleaning up process...');
+      // 先尝试优雅地终止
+      wrapper.childProcess.kill('SIGINT');
+      
+      const killTimeout = setTimeout(() => {
+        if (wrapper.childProcess) {
+          console.log('Process did not exit in time, force killing...');
+          wrapper.childProcess.kill('SIGKILL');
+        }
+      }, 5000);
+
+      // 添加一次性的 exit 监听器
+      wrapper.childProcess.once('exit', () => {
+        console.log('Process exited successfully');
+        clearTimeout(killTimeout);
+      });
+    } catch (error) {
+      console.error('Error cleaning up process:', error);
+    }
+  }
+}
+
+// 修改 setupProcessCleanup 函数
+function setupProcessCleanup() {
+  // 处理 SIGINT (Ctrl+C)
+  process.on('SIGINT', () => {
+    console.log('Received SIGINT signal, cleaning up...');
+    for (const [name, wrapper] of mcpClients.entries()) {
+      console.log(`Cleaning up process for server ${name}`);
+      cleanupProcess(wrapper);
+    }
+    // 给清理过程一些时间，然后退出
+    setTimeout(() => {
+      console.log('Exiting...');
+      process.exit(0);
+    }, 1000);
+  });
+
+  // 处理正常退出
+  process.on('exit', () => {
+    console.log('Process exit, cleaning up...');
+    for (const [name, wrapper] of mcpClients.entries()) {
+      if (wrapper.childProcess) {
+        try {
+          wrapper.childProcess.kill('SIGKILL');
+        } catch (error) {
+          console.error(`Error killing process for ${name}:`, error);
+        }
+      }
+    }
+  });
+}
+
+// 修改 initializeClient 函数
 async function initializeClient(name: string, config: MCPServerConfig): Promise<void> {
   try {
     console.log(`Initializing client for server: ${name}`);
@@ -71,13 +129,33 @@ async function initializeClient(name: string, config: MCPServerConfig): Promise<
       }
     );
 
-    // 创建客户端包装器
     const wrapper: MCPClientWrapper = {
       client,
       transport,
       isConnecting: true,
       isConnected: false
     };
+
+    // 使用 @ts-ignore 来忽略类型检查
+    // @ts-ignore: StdioClientTransport 内部确实有 process 属性
+    wrapper.childProcess = transport.process;
+
+    // 设置进程事件处理
+    if (wrapper.childProcess) {
+      wrapper.childProcess.on('error', (error: Error) => {
+        console.error(`Process error for server ${name}:`, error);
+        wrapper.isConnected = false;
+        mcpClients.delete(name);
+      });
+
+      wrapper.childProcess.on('exit', (code: number, signal: string) => {
+        console.log(`Process for server ${name} exited with code ${code} and signal ${signal}`);
+        wrapper.isConnected = false;
+        mcpClients.delete(name);
+        clearTimeout(wrapper.childProcess._killTimeout);
+      });
+    }
+
     mcpClients.set(name, wrapper);
 
     try {
@@ -92,14 +170,13 @@ async function initializeClient(name: string, config: MCPServerConfig): Promise<
     } catch (error) {
       wrapper.lastError = error as Error;
       console.error(`Failed to connect client for server ${name}:`, error);
-      // 如果连接失败，从 map 中移除
+      cleanupProcess(wrapper);
       mcpClients.delete(name);
     } finally {
       wrapper.isConnecting = false;
     }
   } catch (error) {
     console.error(`Error initializing client for server ${name}:`, error);
-    // 确保在出错时从 map 中移除
     mcpClients.delete(name);
     throw error;
   }
@@ -183,6 +260,8 @@ const mockTools: Record<string, MCPToolInfo[]> = {
 }
 
 export function setupMockMCPService() {
+  setupProcessCleanup();
+  
   // 处理配置更新
   ipcMain.handle('update-mcp-config', async (_event, configStr: string) => {
     try {
