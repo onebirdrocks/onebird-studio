@@ -27,6 +27,33 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [react()]
+    plugins: [
+      react({
+        jsxRuntime: 'automatic',
+        babel: {
+          parserOpts: {
+            plugins: ['decorators-legacy', 'classProperties']
+          }
+        }
+      })
+    ],
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-router-dom'
+      ]
+    },
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      proxy: {
+        '/ollama': {
+          target: 'http://localhost:11434',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/ollama/, '')
+        }
+      }
+    }
   }
 })

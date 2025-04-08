@@ -1,79 +1,61 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Welcome to OneBird Studio</title>
+  <meta charset="UTF-8" />
+  <title>欢迎使用 OneBird Studio</title>
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+  />
   <style>
     body {
       margin: 0;
       padding: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(to bottom, #0e1e2f, #1c2b40);
-      color: #ffffff;
       display: flex;
-      flex-direction: column;
-      align-items: center;
       justify-content: center;
-      height: 100vh;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     }
-
-    .logo {
-      width: 180px;
-      height: 180px;
-      background-image: url('./icons/onebird_logo_transparent.png');
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-      margin-bottom: 20px;
+    
+    .container {
+      text-align: center;
+      padding: 2rem;
     }
-
+    
     h1 {
-      font-size: 28px;
-      margin-bottom: 10px;
+      color: #2c3e50;
+      margin-bottom: 1rem;
     }
-
+    
     p {
-      font-size: 16px;
-      margin-bottom: 30px;
-      opacity: 0.8;
+      color: #7f8c8d;
+      margin-bottom: 2rem;
     }
-
-    .buttons {
-      display: flex;
-      gap: 20px;
-    }
-
-    .btn {
-      padding: 12px 24px;
-      background-color: #fcb13e;
-      color: #000;
+    
+    button {
+      background-color: #3498db;
+      color: white;
       border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      font-size: 14px;
+      padding: 0.8rem 2rem;
+      font-size: 1rem;
+      border-radius: 4px;
       cursor: pointer;
-      transition: background 0.3s ease;
+      transition: background-color 0.2s;
     }
-
-    .btn:hover {
-      background-color: #ffcb6b;
+    
+    button:hover {
+      background-color: #2980b9;
     }
   </style>
-
-  <script>
-    function goToMain() {
-      window.electron?.ipcRenderer?.send('go-main')
-    }
-  </script>
-
+  <script src="welcome.js" defer></script>
 </head>
 <body>
-  <div class="logo"></div>
-  <h1>Welcome to OneBird Studio</h1>
-  <p>Your lightweight AI-powered studio for solo creators and digital nomads</p>
-  <div class="buttons">
-    <button class="btn" onclick="goToMain()">Enter Studio</button>
+  <div class="container">
+    <h1>欢迎使用 OneBird Studio</h1>
+    <p>一个为创作者打造的本地优先的桌面应用</p>
+    <button id="startButton">开始使用</button>
   </div>
 </body>
 </html>

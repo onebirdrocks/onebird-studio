@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>欢迎使用 OneBird Studio</title>
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+  />
+  <style>
+    /* ... 保持原有样式 ... */
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>欢迎使用 OneBird Studio</h1>
+    <p>一个为创作者打造的本地优先的桌面应用</p>
+    <button onclick="goToMain()">开始使用</button>
+  </div>
+
+  <script>
+    function goToMain() {
+      if (window.api && typeof window.api.sendMessage === 'function') {
+        window.api.sendMessage('navigate-to-main')
+      }
+    }
+  </script>
+</body>
+</html> 

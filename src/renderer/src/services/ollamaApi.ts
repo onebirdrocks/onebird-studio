@@ -8,31 +8,58 @@ import type {
 import axios, { AxiosError } from 'axios';
 import { useApiStore } from '../stores/apiStore';
 
+// 根据环境确定基础 URL
+const BASE_URL = process.env.NODE_ENV === 'development' 
+  ? '/ollama'  // 开发环境使用代理
+  : 'http://localhost:11434'  // 生产环境直接连接
+
+const ollamaApi = axios.create({
+  baseURL: BASE_URL,
+  timeout: 10000
+})
+
+export interface OllamaModel {
+  name: string
+  modified_at: string
+  size: number
+  digest: string
+  details: {
+    format: string
+    family: string
+    parameter_size: string
+    quantization_level: string
+  }
+}
+
 /**
  * 获取本地 Ollama 可用的模型列表
  * @returns 返回模型列表，每个模型包含 id 和 name
  */
-export async function getOllamaModels(): Promise<ApiModel[]> {
+export async function getOllamaModels(): Promise<OllamaModel[]> {
   const { getProviderConfig, setApiStatus } = useApiStore.getState();
-  const { baseUrl } = getProviderConfig('ollama');
 
   try {
     setApiStatus('ollama', { isLoading: true, error: null });
-    const response = await axios.get<OllamaListResponse>(`${baseUrl}/api/tags`);
+    const response = await ollamaApi.get('/api/tags');
     
-    const models = response.data.models.map(model => ({
-      id: model.name,
-      name: model.name,
-      details: {
-        format: model.details.format,
-        family: model.details.family,
-        parameterSize: model.details.parameter_size,
-        quantizationLevel: model.details.quantization_level
-      }
-    }));
+    if (response.data && Array.isArray(response.data.models)) {
+      const models = response.data.models.map(model => ({
+        name: model.name,
+        modified_at: model.modified_at,
+        size: model.size,
+        digest: model.digest,
+        details: {
+          format: model.details.format,
+          family: model.details.family,
+          parameter_size: model.details.parameter_size,
+          quantization_level: model.details.quantization_level
+        }
+      }));
 
-    setApiStatus('ollama', { isAvailable: true, isLoading: false });
-    return models;
+      setApiStatus('ollama', { isAvailable: true, isLoading: false });
+      return models;
+    }
+    throw new Error('无效的响应格式');
   } catch (error) {
     console.error('Failed to fetch Ollama models:', error);
     setApiStatus('ollama', {

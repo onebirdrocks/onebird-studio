@@ -1,62 +1,69 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 
 export interface MCPServerConfig {
   command: string
   args: string[]
 }
 
-export interface MCPServers {
-  [key: string]: MCPServerConfig
+export interface MCPToolInfo {
+  name: string
+  description: string
 }
 
-interface MCPStore {
+export type MCPServers = Record<string, MCPServerConfig>
+
+interface MCPState {
   mcpServers: MCPServers
+  serverTools: Record<string, MCPToolInfo[]>
   addServer: (name: string, config: MCPServerConfig) => void
   removeServer: (name: string) => void
-  validateConfig: (config: string) => { isValid: boolean; error?: string }
+  validateConfig: (configStr: string) => { isValid: boolean; error?: string }
+  fetchServerTools: (serverName: string, config: MCPServerConfig) => Promise<void>
 }
 
-export const useMCPStore = create<MCPStore>()(
-  persist(
-    (set) => ({
-      mcpServers: {},
-      addServer: (name, config) => 
-        set((state) => ({
-          mcpServers: {
-            ...state.mcpServers,
-            [name]: config
-          }
-        })),
-      removeServer: (name) =>
-        set((state) => {
-          const newServers = { ...state.mcpServers }
-          delete newServers[name]
-          return { mcpServers: newServers }
-        }),
-      validateConfig: (configStr) => {
-        try {
-          const config = JSON.parse(configStr)
-          if (typeof config !== 'object' || config === null) {
-            return { isValid: false, error: '配置必须是一个对象' }
-          }
-          if (!config.command || typeof config.command !== 'string') {
-            return { isValid: false, error: '缺少 command 字段或类型不正确' }
-          }
-          if (!Array.isArray(config.args)) {
-            return { isValid: false, error: 'args 必须是一个数组' }
-          }
-          if (!config.args.every(arg => typeof arg === 'string')) {
-            return { isValid: false, error: 'args 数组中的所有元素必须是字符串' }
-          }
-          return { isValid: true }
-        } catch (e) {
-          return { isValid: false, error: '无效的 JSON 格式' }
-        }
+export const useMCPStore = create<MCPState>((set, get) => ({
+  mcpServers: {},
+  serverTools: {},
+  
+  addServer: (name, config) => {
+    set((state) => ({
+      mcpServers: {
+        ...state.mcpServers,
+        [name]: config
       }
-    }),
-    {
-      name: 'mcp-storage'
+    }))
+  },
+
+  removeServer: (name) => {
+    set((state) => {
+      const { [name]: _, ...rest } = state.mcpServers
+      return { mcpServers: rest }
+    })
+  },
+
+  validateConfig: (configStr: string) => {
+    try {
+      const config = JSON.parse(configStr)
+      if (!config.command || !Array.isArray(config.args)) {
+        return { isValid: false, error: '配置必须包含 command 和 args 字段' }
+      }
+      return { isValid: true }
+    } catch (e) {
+      return { isValid: false, error: '无效的 JSON 格式' }
     }
-  )
-) 
+  },
+
+  fetchServerTools: async (serverName: string, config: MCPServerConfig) => {
+    try {
+      const tools = await window.electron.ipcRenderer.invoke('get-mcp-tools', config)
+      set((state) => ({
+        serverTools: {
+          ...state.serverTools,
+          [serverName]: tools
+        }
+      }))
+    } catch (error) {
+      console.error('Failed to fetch server tools:', error)
+    }
+  }
+})) 

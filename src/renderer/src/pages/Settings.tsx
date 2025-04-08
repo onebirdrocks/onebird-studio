@@ -1,4 +1,4 @@
-import { FC, useState } from 'react'
+import { FC, useState, useEffect } from 'react'
 import { useSettingStore, ThemeColor, FontFamily } from '../stores/settingStore'
 import { useModelStore } from '../stores/modelStore'
 import { useMCPStore, MCPServers } from '../stores/mcpStore'
@@ -29,7 +29,7 @@ const Settings: FC = () => {
   const [validationStatus, setValidationStatus] = useState<Record<string, 'success' | 'error' | null>>({})
   const { themeColor, setThemeColor, fontSize, setFontSize, fontFamily, setFontFamily } = useSettingStore()
   const { apiKeys, setApiKey, removeApiKey } = useModelStore()
-  const { mcpServers, addServer, removeServer, validateConfig } = useMCPStore()
+  const { mcpServers, addServer, removeServer, validateConfig, fetchServerTools, serverTools } = useMCPStore()
   const [showAddServer, setShowAddServer] = useState(false)
   const [newServerName, setNewServerName] = useState('')
   const [newServerConfig, setNewServerConfig] = useState('')
@@ -38,6 +38,13 @@ const Settings: FC = () => {
   const [fullConfig, setFullConfig] = useState('')
   const [editingServer, setEditingServer] = useState<string | null>(null)
   const [enabledServers, setEnabledServers] = useState<Record<string, boolean>>({})
+
+  // 添加 useEffect 来在组件加载时获取工具列表
+  useEffect(() => {
+    Object.entries(mcpServers).forEach(([name, config]) => {
+      fetchServerTools(name, config)
+    })
+  }, [mcpServers])
 
   const handleValidateKey = async (model: 'openai' | 'deepseek') => {
     if (!apiKeys[model]) return
@@ -357,16 +364,26 @@ const Settings: FC = () => {
               {Object.entries(mcpServers).map(([name, config]) => (
                 <div
                   key={name}
-                  className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg flex justify-between items-center"
+                  className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
                 >
-                  <div className="flex-1">
-                    <h4 className="text-lg font-medium text-gray-900 dark:text-white">{name}</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {config.command} {config.args.join(' ')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-start gap-4">
+                      <span className={cn(
+                        "inline-block w-2.5 h-2.5 rounded-full mt-2",
+                        serverTools[name] && serverTools[name].length > 0
+                          ? "bg-green-500"
+                          : "bg-red-500"
+                      )} />
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-900 dark:text-white">
+                          {name}
+                        </h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {config.command} {config.args.join(' ')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => handleToggleServer(name)}
@@ -382,39 +399,53 @@ const Settings: FC = () => {
                           )}
                         />
                       </button>
-                      <span className="sr-only">启用/禁用服务器</span>
+
+                      <button
+                        onClick={() => handleRefreshServer(name)}
+                        className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => handleEditServer(name)}
+                        className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={() => removeServer(name)}
+                        className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
-
-                    <button
-                      onClick={() => handleRefreshServer(name)}
-                      className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span className="sr-only">刷新服务器</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleEditServer(name)}
-                      className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                      <span className="sr-only">编辑服务器</span>
-                    </button>
-
-                    <button
-                      onClick={() => removeServer(name)}
-                      className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      <span className="sr-only">删除服务器</span>
-                    </button>
                   </div>
+
+                  {/* 添加工具列表显示 */}
+                  {serverTools[name] && serverTools[name].length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">可用工具：</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {serverTools[name].map((tool) => (
+                          <span
+                            key={tool.name}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                            title={tool.description}
+                          >
+                            {tool.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
