@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import fs from 'fs'
 import icon from '../../resources/icon.png?asset'
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer'
+import { setupMockMCPService, initializeOllamaClient } from './mockMCPService'
 
 const configPath = join(app.getPath('userData'), 'config.json')
 const DEFAULT_ZOOM_LEVEL = -0.5  // 可以根据需要调整这个值
@@ -62,14 +63,20 @@ async function installDevTools() {
 
   try {
     console.log('开始安装 React DevTools...');
-    const extensionPath = await installExtension(REACT_DEVELOPER_TOOLS, {
+    const name = await installExtension(REACT_DEVELOPER_TOOLS, {
       loadExtensionOptions: {
         allowFileAccess: true
       }
     });
-    console.log('React DevTools 安装成功:', extensionPath);
+    console.log('React DevTools 安装成功:', name);
     devToolsInstalled = true;
-    return extensionPath;
+
+    // 强制刷新所有窗口以确保 DevTools 生效
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.reload();
+    });
+
+    return name;
   } catch (err) {
     console.error('安装 React DevTools 时出错:', err);
     return null;
@@ -78,38 +85,49 @@ async function installDevTools() {
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1200,
+    height: 800,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../../out/preload/index.js'),
-      sandbox: false,
-      zoomFactor: 1.0,
-      nodeIntegration: true,
+      sandbox: true,
       contextIsolation: true,
-      // 只在生产环境启用 webSecurity
-      webSecurity: !is.dev
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      nodeIntegration: false
     }
   })
 
-  // 设置 CSP 策略
+  // 设置 CSP
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    // 开发环境和生产环境使用不同的 CSP 配置
+    const csp = is.dev
+      ? [
+          "default-src 'self';" +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval';" +
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;" +
+          "font-src 'self' https://fonts.gstatic.com;" +
+          "img-src 'self' data: https:;" +
+          "connect-src 'self' https: ws: wss: http://localhost:11434 http://127.0.0.1:11434;"
+        ]
+      : [
+          "default-src 'self';" +
+          "script-src 'self';" +
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;" +
+          "font-src 'self' https://fonts.gstatic.com;" +
+          "img-src 'self' data: https:;" +
+          "connect-src 'self' https: http://localhost:11434 http://127.0.0.1:11434;"
+        ];
+
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self';" +
-          "connect-src 'self' http://localhost:11434 https://api.openai.com https://api.deepseek.com;" +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' chrome-extension://*;" +
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com chrome-extension://*;" +
-          "font-src 'self' data: https://fonts.gstatic.com;" +
-          "img-src 'self' data:;"
-        ]
+        'Content-Security-Policy': csp
       }
-    });
-  });
+    })
+  })
 
   // 设置初始缩放级别
   mainWindow.webContents.setZoomLevel(DEFAULT_ZOOM_LEVEL)
@@ -136,25 +154,37 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  if (true) {  // if isFirstLaunch() 如果是第一次启动，则显示欢迎页面 
-    mainWindow.loadFile(join(__dirname, '../../resources/welcome.html'))
-    markWelcomeShown()
-  } else {
+  // 加载欢迎页面
+  const welcomePath = join(__dirname, '../../resources/welcome.html')
+  mainWindow.loadFile(welcomePath)
+
+  // 处理导航事件
+  ipcMain.on('navigate-to-main', () => {
     const rendererUrl = process.env['ELECTRON_RENDERER_URL']
     if (is.dev && rendererUrl) {
-      mainWindow.loadURL(rendererUrl)
+      mainWindow.loadURL(rendererUrl).catch(console.error)
     } else {
-      mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+      const indexPath = join(__dirname, '../renderer/index.html')
+      mainWindow.loadFile(indexPath).catch(console.error)
     }
-  }
+  })
 }
 
 app.whenReady().then(async () => {
-  electronApp.setAppUserModelId('com.electron')
-
-  // 在应用启动时安装 DevTools
+  // 确保在其他操作之前安装 DevTools
   if (is.dev) {
     await installDevTools();
+  }
+
+  electronApp.setAppUserModelId('com.electron')
+  setupMockMCPService()
+  
+  // 初始化 ollama 客户端
+  try {
+    await initializeOllamaClient()
+    console.log('Successfully initialized ollama client')
+  } catch (error) {
+    console.error('Failed to initialize ollama client:', error)
   }
 
   app.on('browser-window-created', (_, window) => {

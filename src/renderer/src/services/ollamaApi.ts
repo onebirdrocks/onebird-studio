@@ -8,31 +8,58 @@ import type {
 import axios, { AxiosError } from 'axios';
 import { useApiStore } from '../stores/apiStore';
 
+// 根据环境确定基础 URL
+const BASE_URL = process.env.NODE_ENV === 'development' 
+  ? '/ollama'  // 开发环境使用代理
+  : 'http://localhost:11434'  // 生产环境直接连接
+
+const ollamaApi = axios.create({
+  baseURL: BASE_URL,
+  timeout: 10000
+})
+
+export interface OllamaModel {
+  name: string
+  modified_at: string
+  size: number
+  digest: string
+  details: {
+    format: string
+    family: string
+    parameter_size: string
+    quantization_level: string
+  }
+}
+
 /**
  * 获取本地 Ollama 可用的模型列表
  * @returns 返回模型列表，每个模型包含 id 和 name
  */
-export async function getOllamaModels(): Promise<ApiModel[]> {
+export async function getOllamaModels(): Promise<OllamaModel[]> {
   const { getProviderConfig, setApiStatus } = useApiStore.getState();
-  const { baseUrl } = getProviderConfig('ollama');
 
   try {
     setApiStatus('ollama', { isLoading: true, error: null });
-    const response = await axios.get<OllamaListResponse>(`${baseUrl}/api/tags`);
+    const response = await ollamaApi.get('/api/tags');
     
-    const models = response.data.models.map(model => ({
-      id: model.name,
-      name: model.name,
-      details: {
-        format: model.details.format,
-        family: model.details.family,
-        parameterSize: model.details.parameter_size,
-        quantizationLevel: model.details.quantization_level
-      }
-    }));
+    if (response.data && Array.isArray(response.data.models)) {
+      const models = response.data.models.map(model => ({
+        name: model.name,
+        modified_at: model.modified_at,
+        size: model.size,
+        digest: model.digest,
+        details: {
+          format: model.details.format,
+          family: model.details.family,
+          parameter_size: model.details.parameter_size,
+          quantization_level: model.details.quantization_level
+        }
+      }));
 
-    setApiStatus('ollama', { isAvailable: true, isLoading: false });
-    return models;
+      setApiStatus('ollama', { isAvailable: true, isLoading: false });
+      return models;
+    }
+    throw new Error('无效的响应格式');
   } catch (error) {
     console.error('Failed to fetch Ollama models:', error);
     setApiStatus('ollama', {
@@ -79,30 +106,56 @@ export async function chatWithOllama(
   signal?: AbortSignal
 ): Promise<void> {
   const { getProviderConfig, setApiStatus } = useApiStore.getState();
-  const { baseUrl } = getProviderConfig('ollama');
   const { onToken, onError, onComplete } = callbacks;
 
   try {
+    // 检查模型ID
+    if (!modelId || typeof modelId !== 'string' || modelId.trim() === '') {
+      throw new Error('模型ID不能为空');
+    }
+
     setApiStatus('ollama', { isLoading: true, error: null });
-    const response = await fetch(`${baseUrl}/api/chat`, {
+    
+    // 转换消息格式，确保系统消息被正确处理
+    const formattedMessages = messages.map(msg => ({
+      role: msg.role === 'system' ? 'system' : msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msg.content
+    }));
+
+    const requestBody = {
+      model: modelId.trim(),
+      messages: formattedMessages,
+      stream: true
+    };
+
+    // 添加详细的调试日志
+    console.log('Ollama 请求详情:', {
+      modelId: modelId,
+      url: `${BASE_URL}/api/chat`,
+      requestBody: JSON.stringify(requestBody, null, 2),
+      messagesCount: messages.length,
+      firstMessage: messages[0]?.content.substring(0, 100) // 只显示第一条消息的前100个字符
+    });
+
+    const response = await fetch(`${BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: modelId,
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        })),
-        stream: true
-      }),
+      body: JSON.stringify(requestBody),
       signal
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}, message: ${errorData}`);
+      const errorInfo = {
+        status: response.status,
+        statusText: response.statusText,
+        errorData,
+        requestBody: requestBody
+      };
+      console.error('Ollama API 错误详情:', errorInfo);
+      throw new Error(`Ollama API 错误: ${errorData}`);
     }
 
     if (!response.body) {

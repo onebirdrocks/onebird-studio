@@ -7,6 +7,9 @@ import { getOllamaModels } from '../services/ollamaApi';
 import { getOpenAIModels } from '../services/openaiApi';
 import { getDeepSeekModels } from '../services/deepseekApi';
 import type { Model } from '../stores/modelStore';
+import { cn } from '../lib/utils';
+import { FC } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface NewChatDialogProps {
   isOpen: boolean;
@@ -42,9 +45,10 @@ const PROVIDERS: Provider[] = [
   }
 ];
 
-export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDialogProps) {
+export const NewChatDialog: FC<NewChatDialogProps> = ({ isOpen, onClose, onConfirm }) => {
   const { apiKeys } = useModelStore();
   const { getProviderConfig } = useApiStore();
+  const navigate = useNavigate();
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [availableModels, setAvailableModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -143,95 +147,107 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 p-6 text-left align-middle shadow-xl transition-all">
-                <div className="flex items-center gap-4 mb-4">
+              <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-6 shadow-xl transition-all">
+                <Dialog.Title className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
                   {selectedProvider && (
                     <button
                       onClick={handleBack}
-                      className="p-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      className="mr-2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
                     >
-                      <ChevronLeft size={20} />
+                      <ChevronLeft className="w-5 h-5" />
                     </button>
                   )}
-                  <Dialog.Title
-                    as="h3"
-                    className="text-lg font-medium leading-6 text-gray-900 dark:text-white"
-                  >
-                    {selectedProvider ? '选择模型' : '选择提供商'}
-                  </Dialog.Title>
-                </div>
+                  新建聊天
+                </Dialog.Title>
 
                 {error && (
-                  <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg">
-                    {error}
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 flex items-center justify-between">
+                    <span>{error}</span>
+                    {error.includes('API 密钥') && (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          navigate('/settings?tab=models');
+                        }}
+                        className="ml-4 px-3 py-1 text-sm bg-red-600 dark:bg-red-500 text-white rounded-md hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
+                      >
+                        前往设置
+                      </button>
+                    )}
                   </div>
                 )}
 
-                <div className="mt-4 space-y-2">
-                  {!selectedProvider ? (
-                    // 显示提供商列表
-                    PROVIDERS.map(provider => {
-                      const isAvailable = !provider.requiresKey || apiKeys[provider.id];
-                      return (
-                        <button
-                          key={provider.id}
-                          onClick={() => handleProviderSelect(provider)}
-                          disabled={!isAvailable}
-                          className={`w-full p-4 rounded-lg text-left transition-colors ${
-                            isAvailable
-                              ? 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                              : 'opacity-50 cursor-not-allowed'
-                          }`}
-                        >
-                          <div className="font-medium text-gray-900 dark:text-white">
-                            {provider.name}
-                          </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                            {provider.description}
-                            {provider.requiresKey && !apiKeys[provider.id] && (
-                              <span className="text-yellow-600 dark:text-yellow-400 ml-2">
-                                需要配置 API 密钥
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    // 显示模型列表
-                    isLoading ? (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        加载模型列表中...
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white" />
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {!selectedProvider ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          {PROVIDERS.map((provider) => (
+                            <button
+                              key={provider.id}
+                              onClick={() => handleProviderSelect(provider)}
+                              className={cn(
+                                'p-4 rounded-lg border text-left transition-colors',
+                                'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                              )}
+                            >
+                              <div className="font-medium text-gray-900 dark:text-white">
+                                {provider.name}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                {provider.description}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    ) : availableModels.length > 0 ? (
-                      availableModels.map(model => (
-                        <button
-                          key={model.id}
-                          onClick={() => handleModelSelect(model)}
-                          className="w-full p-4 rounded-lg text-left transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                        >
-                          <div className="font-medium text-gray-900 dark:text-white">
-                            {model.name}
-                          </div>
-                        </button>
-                      ))
                     ) : (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        没有可用的模型
-                      </div>
-                    )
-                  )}
-                </div>
+                      availableModels.length > 0 && (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            {availableModels.map((model) => (
+                              <button
+                                key={model.id || model.name}
+                                onClick={() => handleModelSelect(model)}
+                                className={cn(
+                                  'p-4 rounded-lg border text-left transition-colors',
+                                  'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                )}
+                              >
+                                <div className="font-medium text-gray-900 dark:text-white">
+                                  {model.name}
+                                </div>
+                                {model.details && (
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    {Object.entries(model.details).map(([key, value]) => (
+                                      <span key={`${model.id || model.name}-${key}`} className="mr-2">
+                                        {key}: {value}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    )}
 
-                <div className="mt-6 flex justify-end">
-                  <button
-                    type="button"
-                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                    onClick={onClose}
-                  >
-                    取消
-                  </button>
-                </div>
+                    <div className="flex justify-end space-x-4">
+                      <button
+                        type="button"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                        onClick={onClose}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Dialog.Panel>
             </Transition.Child>
           </div>
@@ -239,4 +255,6 @@ export default function NewChatDialog({ isOpen, onClose, onConfirm }: NewChatDia
       </Dialog>
     </Transition>
   );
-} 
+};
+
+export default NewChatDialog; 
